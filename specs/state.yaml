@@ -4,9 +4,9 @@ project_cycle:
   completed_phases: [1, 2, 3]
 active_flow: fix_bug
 handoff:
-  last_step_completed: aesv2-compatibility-fix-and-full-preflight
-  next_skill: module-rename
+  last_step_completed: module-rename-and-cross-platform-preflight
+  next_skill: verify-work
   open_decisions:
-    - Verify upstream base (checkout HEAD 4d0e9ff2).
-    - Rename module to github.com/umats/pdfcpu and run Windows builds.
+    - UAT held pending Docker access (default socket belongs to another user).
+    - Review the module rename and AESV2 exception before integration.
     - Do not publish, tag, merge, or release without explicit approval.
