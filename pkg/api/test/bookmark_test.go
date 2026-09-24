@@ -100,7 +100,7 @@ func TestAddDuplicateBookmarks(t *testing.T) {
 func TestAddSimpleBookmarks(t *testing.T) {
 	msg := "TestAddSimpleBookmarks"
 	inFile := filepath.Join(inDir, "CenterOfWhy.pdf")
-	outFile := filepath.Join("..", "..", "samples", "bookmarks", "bookmarkSimple.pdf")
+	outFile := filepath.Join(t.TempDir(), "bookmarkSimple.pdf")
 
 	bookmarkColor := color.NewSimpleColor(0xab6f30)
 
