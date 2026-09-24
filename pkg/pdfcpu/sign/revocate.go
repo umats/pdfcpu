@@ -28,8 +28,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/pdfcpu/pdfcpu/internal/contextutil"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/internal/contextutil"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
 	"golang.org/x/crypto/ocsp"
 )
 

@@ -27,11 +27,11 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/pdfcpu/pdfcpu/internal/contextutil"
-	"github.com/pdfcpu/pdfcpu/pkg/api"
-	"github.com/pdfcpu/pdfcpu/pkg/log"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/form"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/internal/contextutil"
+	"github.com/umats/pdfcpu/pkg/api"
+	"github.com/umats/pdfcpu/pkg/log"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/form"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
 )
 
 func validateFormPDFCommand(cmd *Command, operation string) error {

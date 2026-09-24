@@ -22,10 +22,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/api"
-	"github.com/pdfcpu/pdfcpu/pkg/cli"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/api"
+	"github.com/umats/pdfcpu/pkg/cli"
+	"github.com/umats/pdfcpu/pkg/pdfcpu"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
 )
 
 func useEmptyCLISignatureTrustStore(t *testing.T) {

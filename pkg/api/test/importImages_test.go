@@ -24,8 +24,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/api"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/pkg/api"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 func testImportImages(t *testing.T, msg string, imgFiles []string, outFile, impConf string) {

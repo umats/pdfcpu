@@ -20,7 +20,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/umats/pdfcpu/pkg/api"
 )
 
 type cutCLIExec = dispatchFunc

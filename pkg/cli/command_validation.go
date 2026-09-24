@@ -19,7 +19,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/umats/pdfcpu/pkg/api"
 )
 
 type commandStringRequirement uint8

@@ -23,9 +23,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/pdfcpu/pdfcpu/pkg/log"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/pkg/log"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 // DocumentProperty ensures a property name that may be modified.

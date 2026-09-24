@@ -30,8 +30,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/pkg/pdfcpu"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 type importImageFailingReader struct {

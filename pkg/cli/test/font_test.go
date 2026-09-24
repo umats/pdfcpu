@@ -23,8 +23,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/api"
-	"github.com/pdfcpu/pdfcpu/pkg/cli"
+	"github.com/umats/pdfcpu/pkg/api"
+	"github.com/umats/pdfcpu/pkg/cli"
 )
 
 // TestInstallFontsCommand verifies install fonts command.

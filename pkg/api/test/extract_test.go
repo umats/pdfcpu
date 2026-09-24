@@ -25,9 +25,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/api"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/pkg/api"
+	"github.com/umats/pdfcpu/pkg/pdfcpu"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 // TestExtractImages verifies image extraction.

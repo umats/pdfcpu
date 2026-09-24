@@ -20,7 +20,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/pdfcpu/pdfcpu/pkg/log"
+	"github.com/umats/pdfcpu/pkg/log"
 	"golang.org/x/image/ccitt"
 )
 

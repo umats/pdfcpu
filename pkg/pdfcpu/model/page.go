@@ -20,9 +20,9 @@ import (
 	"bytes"
 	"strconv"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/color"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/draw"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/color"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/draw"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 // Resource identifies an indirect PDF resource object.

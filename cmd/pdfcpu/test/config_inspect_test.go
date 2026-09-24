@@ -25,7 +25,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/umats/pdfcpu/pkg/api"
 )
 
 func assertInspectionLines(t *testing.T, output []byte, lines ...string) {

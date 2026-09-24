@@ -25,11 +25,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pdfcpu/pdfcpu/internal/contextutil"
-	pdffont "github.com/pdfcpu/pdfcpu/pkg/pdfcpu/font"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/primitives"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/internal/contextutil"
+	pdffont "github.com/umats/pdfcpu/pkg/pdfcpu/font"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/primitives"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 // DataFormat identifies a supported form data format.

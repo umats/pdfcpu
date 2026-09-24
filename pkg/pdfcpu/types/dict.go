@@ -22,7 +22,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pdfcpu/pdfcpu/pkg/log"
+	"github.com/umats/pdfcpu/pkg/log"
 )
 
 // Dict represents a PDF dict object.

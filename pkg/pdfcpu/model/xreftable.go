@@ -34,12 +34,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pdfcpu/pdfcpu/internal/contextutil"
-	"github.com/pdfcpu/pdfcpu/pkg/filter"
-	"github.com/pdfcpu/pdfcpu/pkg/font"
-	"github.com/pdfcpu/pdfcpu/pkg/log"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/scan"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/internal/contextutil"
+	"github.com/umats/pdfcpu/pkg/filter"
+	"github.com/umats/pdfcpu/pkg/font"
+	"github.com/umats/pdfcpu/pkg/log"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/scan"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 // ErrNoContent reports a page without content.

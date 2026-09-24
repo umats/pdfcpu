@@ -25,12 +25,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/api"
-	"github.com/pdfcpu/pdfcpu/pkg/cli"
-	"github.com/pdfcpu/pdfcpu/pkg/font"
-	"github.com/pdfcpu/pdfcpu/pkg/log"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/pkg/api"
+	"github.com/umats/pdfcpu/pkg/cli"
+	"github.com/umats/pdfcpu/pkg/font"
+	"github.com/umats/pdfcpu/pkg/log"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 var inDir, outDir, resDir, fontDir, samplesDir string

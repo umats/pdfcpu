@@ -22,7 +22,7 @@ import (
 	"image/jpeg"
 	"io"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/safemath"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/safemath"
 )
 
 type dctDecode struct {

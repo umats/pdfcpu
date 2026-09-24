@@ -27,12 +27,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/pdfcpu/pdfcpu/internal/contextutil"
-	"github.com/pdfcpu/pdfcpu/pkg/log"
-	pdffont "github.com/pdfcpu/pdfcpu/pkg/pdfcpu/font"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/primitives"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/internal/contextutil"
+	"github.com/umats/pdfcpu/pkg/log"
+	pdffont "github.com/umats/pdfcpu/pkg/pdfcpu/font"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/primitives"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 func optimizeContentStreamUsage(ctx *model.Context, sd *types.StreamDict, objNr int) (*types.IndirectRef, error) {

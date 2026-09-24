@@ -20,7 +20,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/pdfcpu/pdfcpu/internal/contextutil"
+	"github.com/umats/pdfcpu/internal/contextutil"
 )
 
 const nameTreeMaxKids = 4

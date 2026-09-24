@@ -25,8 +25,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/pdfcpu/pdfcpu/internal/contextutil"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/internal/contextutil"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 func appendPair(pairs []int, a, b int) []int {

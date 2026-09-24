@@ -21,8 +21,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 func arrayCardinalityError(dictName, entryName string, objNr, actual int, expected string) error {

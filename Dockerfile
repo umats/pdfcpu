@@ -22,8 +22,10 @@
 # Start from the latest golang base image
 FROM golang:latest AS builder
 
-# install
-RUN go install github.com/pdfcpu/pdfcpu/cmd/pdfcpu@latest
+# Build this fork rather than fetching the upstream module.
+WORKDIR /src
+COPY . .
+RUN go build -o /go/bin/pdfcpu ./cmd/pdfcpu
 
 ######## Start a new stage from scratch #######
 

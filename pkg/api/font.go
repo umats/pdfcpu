@@ -28,14 +28,14 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/pdfcpu/pdfcpu/internal/contextutil"
-	"github.com/pdfcpu/pdfcpu/internal/fileutil"
-	"github.com/pdfcpu/pdfcpu/pkg/font"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/color"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/draw"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/fault"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/internal/contextutil"
+	"github.com/umats/pdfcpu/internal/fileutil"
+	"github.com/umats/pdfcpu/pkg/font"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/color"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/draw"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/fault"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 // FontInstallResult reports non-fatal cleanup failures encountered while installing fonts.

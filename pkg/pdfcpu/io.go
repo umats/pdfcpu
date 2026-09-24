@@ -26,8 +26,8 @@ import (
 	"path/filepath"
 	"reflect"
 
-	"github.com/pdfcpu/pdfcpu/internal/contextutil"
-	"github.com/pdfcpu/pdfcpu/internal/fileutil"
+	"github.com/umats/pdfcpu/internal/contextutil"
+	"github.com/umats/pdfcpu/internal/fileutil"
 )
 
 type namedWriteCloser interface {

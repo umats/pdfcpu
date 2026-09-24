@@ -20,7 +20,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/pdfcpu/pdfcpu/pkg/log"
+	"github.com/umats/pdfcpu/pkg/log"
 )
 
 // ShowMsg logs msg.

@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 // TestDecodeNameHexInvalid verifies invalid name hex escapes are rejected.

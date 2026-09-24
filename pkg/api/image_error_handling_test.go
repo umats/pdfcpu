@@ -27,7 +27,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
+	"github.com/umats/pdfcpu/pkg/pdfcpu"
 )
 
 func imageTestPDF() string {

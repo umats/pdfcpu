@@ -20,7 +20,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 func requireNameTreeBindingError(t *testing.T, err error, want ...string) {

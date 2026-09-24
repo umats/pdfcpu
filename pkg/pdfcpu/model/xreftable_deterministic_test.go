@@ -20,7 +20,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 func freeListTestEntry(next int64) *XRefTableEntry {

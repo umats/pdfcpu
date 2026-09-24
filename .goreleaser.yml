@@ -6,7 +6,10 @@ builds:
       - CGO_ENABLED=0
       - GOWORK=off
     ldflags:
-      - '-s -w -X main.version={{.Version}} -X github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model.VersionStr={{.Version}} -X main.commit={{.ShortCommit}} -X main.date={{.Date}}'
+      - >-
+        -s -w -X main.version={{.Version}}
+        -X github.com/umats/pdfcpu/pkg/pdfcpu/model.VersionStr={{.Version}}
+        -X main.commit={{.ShortCommit}} -X main.date={{.Date}}
     goos:
       - linux
       - darwin
@@ -19,14 +22,14 @@ builds:
       - wasm
       - "386"
     goarm:
-      - 7
+      - "7"
     ignore:
       - goos: windows
         goarch: arm
         goarm: 7
       - goos: windows
         goarch: arm64
-      
+
 dist: ./dist
 
 archives:
@@ -71,7 +74,7 @@ changelog:
       - '^test:'
 
 release:
-  draft: true  # Optional: Set to true if you want to create drafts and not publish immediately
+  draft: true
   replace_existing_draft: true
-  replace_existing_artifacts: true 
+  replace_existing_artifacts: true
   prerelease: auto

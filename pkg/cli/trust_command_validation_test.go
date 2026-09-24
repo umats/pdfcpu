@@ -20,9 +20,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/api"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/fault"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/api"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/fault"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
 )
 
 type trustCommandExecutor = dispatchFunc

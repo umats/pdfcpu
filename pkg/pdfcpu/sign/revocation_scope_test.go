@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
 )
 
 // TestLeafRevocationDoesNotClaimParentAssessment verifies authenticated,

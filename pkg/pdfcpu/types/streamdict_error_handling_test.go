@@ -23,7 +23,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/filter"
+	"github.com/umats/pdfcpu/pkg/filter"
 )
 
 type failingDecodedContentReader struct {

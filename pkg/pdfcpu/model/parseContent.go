@@ -21,8 +21,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/pdfcpu/pdfcpu/pkg/log"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/pkg/log"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 var (

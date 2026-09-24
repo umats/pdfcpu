@@ -2,13 +2,18 @@
 
 [![Test](https://github.com/pdfcpu/pdfcpu/workflows/Test/badge.svg)](https://github.com/pdfcpu/pdfcpu/actions)
 [![Coverage Status](https://coveralls.io/repos/github/pdfcpu/pdfcpu/badge.svg?branch=master)](https://coveralls.io/github/pdfcpu/pdfcpu?branch=master)
-[![Go Reference](https://pkg.go.dev/badge/github.com/pdfcpu/pdfcpu.svg)](https://pkg.go.dev/github.com/pdfcpu/pdfcpu)
+[![Go Reference](https://pkg.go.dev/badge/github.com/umats/pdfcpu.svg)](https://pkg.go.dev/github.com/umats/pdfcpu)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Sponsor](https://img.shields.io/badge/Sponsor-GitHub-%23fe8e86?logo=githubsponsors)](https://github.com/sponsors/hhrutter)
 
 <p align="left">
   <a href="https://pdfcpu.io"><img src="resources/logoSmall.png" width="150"></a>
 </p>
+
+This fork uses the Go module `github.com/umats/pdfcpu`. It is based on upstream
+[`4d0e9ff2`](https://github.com/pdfcpu/pdfcpu/commit/4d0e9ff2e547383e02b6b385ea9e6b48c4cc9f65);
+[fork changes](specs/FORK_CHANGES.md) document its narrow compatibility exception.
+The upstream authors and Apache-2.0 license remain credited.
 
 pdfcpu is a PDF processing library and command-line tool written in Go. It supports validation, optimization,
 encryption, signing, document assembly, content extraction, and other common PDF operations.
@@ -139,12 +144,12 @@ It focuses on correctness, robustness and independence from external dependencie
 
 ### Go API
 
-* Package documentation: https://pkg.go.dev/github.com/pdfcpu/pdfcpu
-* API documentation: https://pkg.go.dev/github.com/pdfcpu/pdfcpu/pkg/api
+* Package documentation: https://pkg.go.dev/github.com/umats/pdfcpu
+* API documentation: https://pkg.go.dev/github.com/umats/pdfcpu/pkg/api
 * Examples:
 
-  * https://github.com/pdfcpu/pdfcpu/tree/master/pkg/api/test
-  * https://github.com/pdfcpu/pdfcpu/tree/master/pkg/samples
+  * https://github.com/umats/pdfcpu/tree/master/pkg/api/test
+  * https://github.com/umats/pdfcpu/tree/master/pkg/samples
 
 ---
 

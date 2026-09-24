@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/validate"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/validate"
 )
 
 func validateNoEmptyStrings(ss []string, name string) error {

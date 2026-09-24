@@ -25,7 +25,7 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
-	"github.com/pdfcpu/pdfcpu/pkg/log"
+	"github.com/umats/pdfcpu/pkg/log"
 )
 
 var (

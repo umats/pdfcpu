@@ -27,9 +27,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/pkcs7"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/pkcs7"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 // TestSignatureEvidenceContractFatalPositionalIO verifies positional input
