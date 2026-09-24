@@ -306,12 +306,135 @@ func TestValidateStmfIncludesEncryptEntryContext(t *testing.T) {
 	}
 
 	var specViolations []error
-	err = validateStmf(ctx, d, cfDict, 4, false, false, &specViolations)
+	err = validateStmf(ctx, d, cfDict, 4, false, false, false, &specViolations)
 	if !errors.Is(err, ErrMalformedEncryption) {
 		t.Fatalf("got %v, want %v", err, ErrMalformedEncryption)
 	}
 	if !strings.Contains(err.Error(), `encrypt dict entry "StmF"`) {
 		t.Fatalf("expected StmF context, got %q", err)
+	}
+}
+
+func TestSupportedEncryptionMissingAESV2Length(t *testing.T) {
+	ctx, err := model.NewContext(bytes.NewReader(nil), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := model.V14
+	ctx.XRefTable.HeaderVersion = &v
+	ctx.XRefTable.ValidationMode = model.ValidationRelaxed
+
+	d := newEncryptDict(false, true, 128, 0)
+	d.DictEntry("CF").DictEntry("StdCF").Delete("Length")
+	if _, err := supportedEncryption(ctx, d); err != nil {
+		t.Fatalf("relaxed Standard V4/R4 AESV2 omission: %v", err)
+	}
+}
+
+func TestSupportedEncryptionMissingAESV2LengthBoundaries(t *testing.T) {
+	tests := []struct {
+		name   string
+		strict bool
+		change func(types.Dict, types.Dict)
+	}{
+		{name: "strict", strict: true},
+		{name: "missing top-level Length", change: func(d, _ types.Dict) { d.Delete("Length") }},
+		{name: "wrong top-level Length", change: func(d, _ types.Dict) { d["Length"] = types.Integer(120) }},
+		{name: "malformed top-level Length", change: func(d, _ types.Dict) { d["Length"] = types.Name("128") }},
+		{name: "missing CFM", change: func(_, cf types.Dict) { cf.Delete("CFM") }},
+		{name: "unknown CFM", change: func(_, cf types.Dict) { cf["CFM"] = types.Name("Unknown") }},
+		{name: "other CFM", change: func(_, cf types.Dict) { cf["CFM"] = types.Name("V2") }},
+		{name: "V3", change: func(d, _ types.Dict) { d["V"] = types.Integer(3) }},
+		{name: "R3", change: func(d, _ types.Dict) { d["R"] = types.Integer(3) }},
+		{name: "R5", change: func(d, _ types.Dict) { d["R"] = types.Integer(5) }},
+		{name: "public-key handler", change: func(d, _ types.Dict) { d["Filter"] = types.Name("Adobe.PubSec") }},
+		{name: "malformed local Length", change: func(_, cf types.Dict) { cf["Length"] = types.Name("128") }},
+		{name: "conflicting local Length", change: func(_, cf types.Dict) { cf["Length"] = types.Integer(64) }},
+		{name: "wrongly sized local Length", change: func(_, cf types.Dict) { cf["Length"] = types.Integer(129) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, err := model.NewContext(bytes.NewReader(nil), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			v := model.V14
+			ctx.XRefTable.HeaderVersion = &v
+			ctx.XRefTable.ValidationMode = model.ValidationRelaxed
+			if tt.strict {
+				ctx.XRefTable.ValidationMode = model.ValidationStrict
+			}
+			d := newEncryptDict(false, true, 128, 0)
+			cf := d.DictEntry("CF").DictEntry("StdCF")
+			cf.Delete("Length")
+			if tt.change != nil {
+				tt.change(d, cf)
+			}
+			if _, err := supportedEncryption(ctx, d); err == nil {
+				t.Fatal("expected encryption rejection")
+			}
+		})
+	}
+}
+
+func TestBootstrapCatalogVersionDoesNotResolveStreamFilters(t *testing.T) {
+	pdf := []byte("1 0 obj\n<</Type/Catalog/Version/2.0/Filter 1 0 R/Length 0>>\nstream\n\nendstream\nendobj\n")
+	ctx, err := model.NewContext(bytes.NewReader(pdf), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := model.V14
+	ctx.HeaderVersion = &v
+	ctx.Root = types.NewIndirectRef(1, 0)
+	offset := int64(0)
+	ctx.Table[1] = &model.XRefTableEntry{Offset: &offset, Generation: new(int)}
+	if err := bootstrapCatalogVersion(t.Context(), ctx); err != nil {
+		t.Fatal(err)
+	}
+	if ctx.RootVersion != nil || ctx.Table[1].Object != nil {
+		t.Fatal("stream Catalog was cached or treated as a version override")
+	}
+}
+
+func TestBootstrapCatalogVersionLeavesCorruptOffsetToRepair(t *testing.T) {
+	pdf := []byte("1 0 obj\n<</Type/Catalog/Version/2.0>>\nendobj\n")
+	ctx, err := model.NewContext(bytes.NewReader(pdf), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := model.V14
+	ctx.HeaderVersion = &v
+	ctx.Root = types.NewIndirectRef(1, 0)
+	offset := int64(len(pdf) + 10)
+	ctx.Table[1] = &model.XRefTableEntry{Offset: &offset, Generation: new(int)}
+	if err := bootstrapCatalogVersion(t.Context(), ctx); err != nil {
+		t.Fatalf("bootstrap bypassed normal xref repair: %v", err)
+	}
+	if ctx.RootVersion != nil || ctx.Table[1].Object != nil {
+		t.Fatal("corrupt offset altered Catalog or version state")
+	}
+}
+
+func TestBootstrapCatalogVersionIndirectName(t *testing.T) {
+	pdf := []byte("1 0 obj\n<</Type/Catalog/Version 2 0 R>>\nendobj\n2 0 obj\n/2.0\nendobj\n")
+	ctx, err := model.NewContext(bytes.NewReader(pdf), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := model.V14
+	ctx.HeaderVersion = &v
+	ctx.Root = types.NewIndirectRef(1, 0)
+	first, second := int64(0), int64(bytes.Index(pdf, []byte("2 0 obj")))
+	ctx.Table[1] = &model.XRefTableEntry{Offset: &first, Generation: new(int)}
+	ctx.Table[2] = &model.XRefTableEntry{Offset: &second, Generation: new(int)}
+	if err := bootstrapCatalogVersion(t.Context(), ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := ctx.XRefTable.Version(); got != model.V20 {
+		t.Fatalf("Catalog Version override = %v, want PDF 2.0", got)
+	}
+	if ctx.Table[1].Object != nil || ctx.Table[2].Object != nil {
+		t.Fatal("bootstrap cached undecrypted objects")
 	}
 }
 
@@ -329,7 +452,7 @@ func TestValidateCryptFilterRejectsEFOpenForNonEmbeddedFiles(t *testing.T) {
 		"Length":    types.Integer(32),
 	}
 	var specViolations []error
-	_, err = validateCryptFilter(ctx, d, 5, false, false, false, &specViolations)
+	_, err = validateCryptFilter(ctx, d, 5, false, false, false, false, &specViolations)
 	if !errors.Is(err, ErrMalformedEncryption) {
 		t.Fatalf("got %v, want %v", err, ErrMalformedEncryption)
 	}
