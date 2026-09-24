@@ -1,0 +1,44 @@
+story_id: aesv2-fork-compatibility
+verified_at: '2026-09-24T15:51:44Z'
+verifier: verify-work-cli
+branch: fix/aesv2-missing-cf-length
+phases:
+  smoke:
+    passed: true
+    command: go build -o /tmp/pdfcpu-smoke ./cmd/pdfcpu
+    note: CLI help, version, and invalid-flag behavior passed.
+  build:
+    passed: true
+    command: go build ./...
+  lint:
+    passed: true
+    command: go vet ./...
+  tests:
+    passed: true
+    command: go test ./...
+  terminal_verdict:
+    command: >-
+      go test -count=1 ./pkg/api ./pkg/pdfcpu -run
+      'Test(MissingAESV2CryptFilterLength|SupportedEncryptionMissingAESV2Length|BootstrapCatalogVersion)'
+    exit_code: 0
+    captured_at: '2026-09-24T15:33:26Z'
+    stdout:
+      - ok github.com/umats/pdfcpu/pkg/api 0.536s
+      - ok github.com/umats/pdfcpu/pkg/pdfcpu 0.736s
+  windows_cross_build:
+    passed: true
+    targets:
+      - windows/amd64 cmd/pdfcpu pkg/... internal/...
+      - windows/arm64 cmd/pdfcpu pkg/... internal/...
+  docker:
+    passed: true
+    command: docker build -t pdfcpu-fork-uat .
+    smoke: help, version, and invalid-flag rejection passed in the image.
+    note: Colima/Linux arm64; restricted build context is 27.74 MB.
+  manual:
+    confirmed_by_user: true
+    confirmed_at: '2026-09-24T15:51:44Z'
+    note: User accepted verification; no merge or release was authorized.
+  gaps:
+    closed: true
+    note: Docker socket is available through the Colima context.

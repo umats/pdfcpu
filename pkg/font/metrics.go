@@ -30,10 +30,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pdfcpu/pdfcpu/internal/contextutil"
-	"github.com/pdfcpu/pdfcpu/internal/corefont/metrics"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/sanitize"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/internal/contextutil"
+	"github.com/umats/pdfcpu/internal/corefont/metrics"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/sanitize"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 // TTFLight represents a TrueType font w/o font file.

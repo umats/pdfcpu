@@ -23,7 +23,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 func checkBalancedNameTree(t *testing.T, root *Node, count int) map[*Node]bool {

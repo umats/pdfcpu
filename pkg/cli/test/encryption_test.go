@@ -22,8 +22,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/cli"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/cli"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
 )
 
 func confForAlgorithm(aes bool, keyLength int) *model.Configuration {

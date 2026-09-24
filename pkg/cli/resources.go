@@ -20,8 +20,8 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/pdfcpu"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
 )
 
 // ImportImagesCommand creates a new command to import images.

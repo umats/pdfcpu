@@ -23,9 +23,9 @@ import (
 	"strings"
 	"testing"
 
-	corefont "github.com/pdfcpu/pdfcpu/pkg/font"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	corefont "github.com/umats/pdfcpu/pkg/font"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 func useMissingGlobalFontDirectory(t *testing.T) {

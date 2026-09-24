@@ -21,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/cli"
+	"github.com/umats/pdfcpu/pkg/cli"
 )
 
 // TestMergeCreateCommand all PDFs in testdir into out/test.pdf.

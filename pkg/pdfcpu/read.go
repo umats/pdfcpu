@@ -32,13 +32,13 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/pdfcpu/pdfcpu/internal/contextutil"
-	"github.com/pdfcpu/pdfcpu/pkg/filter"
-	"github.com/pdfcpu/pdfcpu/pkg/log"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/safemath"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/scan"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/internal/contextutil"
+	"github.com/umats/pdfcpu/pkg/filter"
+	"github.com/umats/pdfcpu/pkg/log"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/safemath"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/scan"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 const (
@@ -4077,7 +4077,7 @@ func dereferenceXRefTable(c context.Context, ctx *model.Context) error {
 		return err
 	}
 
-	// Identify an optional Version entry in the root object/catalog.
+	// Resolve the Catalog version after all objects are available as well.
 	if err := identifyRootVersion(xRefTable); err != nil {
 		return err
 	}
@@ -4193,6 +4193,45 @@ func setupEncryptionKey(ctx *model.Context, d types.Dict) (err error) {
 	return handlePermissions(ctx)
 }
 
+// bootstrapCatalogVersion reads only Catalog syntax before the encryption key
+// exists. Failed reads are left to the normal dereference/xref-repair path.
+func bootstrapCatalogVersion(c context.Context, ctx *model.Context) error {
+	if ctx.Root == nil || ctx.RootVersion != nil {
+		return nil
+	}
+	ref := ctx.Root
+	entry, ok := ctx.Find(ref.ObjectNumber.Value())
+	if !ok || entry == nil || entry.Offset == nil || entry.Generation == nil {
+		return nil
+	}
+	root, end, stream, _, err := object(c, ctx, *entry.Offset, ref.ObjectNumber.Value(), *entry.Generation)
+	if err != nil || stream >= 0 && (end < 0 || stream < end) {
+		return nil // Preserve the normal parser and xref-repair error path.
+	}
+	d, ok := root.(types.Dict)
+	if !ok {
+		return nil
+	}
+	if version, ok := d.Find("Version"); ok {
+		if ref, ok := version.(types.IndirectRef); ok {
+			entry, found := ctx.XRefTable.FindTableEntryForIndRef(&ref)
+			if found && entry != nil && entry.Offset != nil && entry.Generation != nil {
+				name, end, stream, _, err := object(c, ctx, *entry.Offset, ref.ObjectNumber.Value(), *entry.Generation)
+				if err == nil && (stream < 0 || end >= 0 && stream > end) {
+					if name, ok := name.(types.Name); ok {
+						d = types.Dict{"Version": name}
+					}
+				}
+			}
+		}
+	}
+	previous := ctx.RootDict
+	ctx.RootDict = d
+	err = identifyRootVersion(ctx.XRefTable)
+	ctx.RootDict = previous
+	return err
+}
+
 func checkForEncryption(c context.Context, ctx *model.Context) error {
 	if err := requireContextWithXRefTable(ctx); err != nil {
 		return err
@@ -4233,6 +4272,12 @@ func checkForEncryption(c context.Context, ctx *model.Context) error {
 	}
 	if err := materializeEncryptionIntegers(c, ctx, d); err != nil {
 		return fmt.Errorf("encryption dictionary obj#%d: %w", objNr, err)
+	}
+
+	// Resolve the Catalog Version before checking crypt-filter Length, without
+	// caching undecrypted objects or resolving untrusted stream filters.
+	if err := bootstrapCatalogVersion(c, ctx); err != nil {
+		return err
 	}
 
 	// We need to decrypt this file in order to read it.

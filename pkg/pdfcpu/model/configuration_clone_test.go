@@ -21,7 +21,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 func containsMutableReferences(t reflect.Type) bool {

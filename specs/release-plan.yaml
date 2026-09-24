@@ -1,0 +1,10 @@
+type: release-plan
+context: fork readiness
+release:
+  version: v0.16.0-rc.1.umats.1
+  status: planning
+  note: Proposed fork version only; no tag or publication authorized.
+epics:
+  - id: e01
+    title: Fork readiness
+    file: epics/e01-fork-readiness/epic.yaml

@@ -21,7 +21,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 // TestCatalogContract verifies required catalog resolution and non-nil success results.

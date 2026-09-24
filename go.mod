@@ -1,4 +1,4 @@
-module github.com/pdfcpu/pdfcpu
+module github.com/umats/pdfcpu
 
 go 1.26.0
 

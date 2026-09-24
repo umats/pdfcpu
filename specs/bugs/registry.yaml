@@ -1,0 +1,8 @@
+bugs:
+  - bug_id: BUG-2026-09-24T143457
+    date: 2026-09-24
+    severity: HIGH
+    priority: HIGH
+    scope: pkg/pdfcpu/crypto.go
+    summary: Narrow relaxed AESV2 compatibility for omitted crypt-filter Length
+    file: specs/bugs/BUG-2026-09-24T143457-aesv2-crypt-filter-length.md

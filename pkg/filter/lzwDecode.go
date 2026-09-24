@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/pdfcpu/pdfcpu/internal/filter/lzw"
-	"github.com/pdfcpu/pdfcpu/pkg/log"
+	"github.com/umats/pdfcpu/internal/filter/lzw"
+	"github.com/umats/pdfcpu/pkg/log"
 )
 
 type lzwDecode struct {

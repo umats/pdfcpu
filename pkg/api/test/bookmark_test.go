@@ -21,10 +21,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/api"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/color"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/api"
+	"github.com/umats/pdfcpu/pkg/pdfcpu"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/color"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
 )
 
 // Acrobat Reader "Bookmarks" = Mac Preview "Table of Contents".
@@ -100,7 +100,7 @@ func TestAddDuplicateBookmarks(t *testing.T) {
 func TestAddSimpleBookmarks(t *testing.T) {
 	msg := "TestAddSimpleBookmarks"
 	inFile := filepath.Join(inDir, "CenterOfWhy.pdf")
-	outFile := filepath.Join("..", "..", "samples", "bookmarks", "bookmarkSimple.pdf")
+	outFile := filepath.Join(t.TempDir(), "bookmarkSimple.pdf")
 
 	bookmarkColor := color.NewSimpleColor(0xab6f30)
 

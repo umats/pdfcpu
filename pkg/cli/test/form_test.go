@@ -23,8 +23,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/cli"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/form"
+	"github.com/umats/pdfcpu/pkg/cli"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/form"
 )
 
 func createSinglePageDemoForm(t *testing.T, fileName string) string {

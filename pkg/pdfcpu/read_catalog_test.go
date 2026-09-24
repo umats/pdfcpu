@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
 )
 
 func catalogEndobjPDF(omitEndobj bool) []byte {

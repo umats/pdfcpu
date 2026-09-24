@@ -28,7 +28,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
 )
 
 // TestOfflineRevocationSkipsDNSAndHTTP verifies both checkers and their fallback stay offline.

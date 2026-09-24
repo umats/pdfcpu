@@ -26,8 +26,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/pdfcpu"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
 )
 
 const (
@@ -50,7 +50,7 @@ type encryptedXRefState struct {
 	encrypted       bool
 }
 
-func encryptedXRefSourcePDF(t *testing.T) ([]byte, []byte) {
+func encryptedXRefSourcePDF(t *testing.T, catalogVersion ...string) ([]byte, []byte) {
 	t.Helper()
 
 	content := []byte("q\n0 0 10 10 re\nS\nQ\n")
@@ -63,8 +63,12 @@ func encryptedXRefSourcePDF(t *testing.T) ([]byte, []byte) {
 		t.Fatal(err)
 	}
 
+	catalog := "<< /Type /Catalog /Pages 2 0 R >>"
+	if len(catalogVersion) > 0 {
+		catalog = "<< /Type /Catalog /Lang (abcdefghijklmnop) /Pages 2 0 R >>"
+	}
 	objects := [][]byte{
-		[]byte("<< /Type /Catalog /Pages 2 0 R >>"),
+		[]byte(catalog),
 		[]byte("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
 		[]byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 4 0 R /Resources << >> >>"),
 		fmt.Appendf(nil, "<< /Length %d /Filter /FlateDecode >>\nstream\n%s\nendstream", compressed.Len(), compressed.Bytes()),

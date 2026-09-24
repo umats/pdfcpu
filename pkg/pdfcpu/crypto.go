@@ -41,10 +41,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pdfcpu/pdfcpu/internal/contextutil"
-	"github.com/pdfcpu/pdfcpu/pkg/log"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/internal/contextutil"
+	"github.com/umats/pdfcpu/pkg/log"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 	"golang.org/x/text/secure/precis"
 	"golang.org/x/text/unicode/norm"
 )
@@ -1272,6 +1272,7 @@ func validateCryptFilter(
 	pubKeySecHandler,
 	relaxed bool,
 	allowEFOpen bool,
+	allowMissingAESV2Length bool,
 	specViolations *[]error,
 ) (bool, error) {
 	// v = 4,5,6
@@ -1289,7 +1290,7 @@ func validateCryptFilter(
 		return false, err
 	}
 	pdf20 := ctx.PDF20()
-	if length == nil && !pdf20 && v != 5 {
+	if length == nil && !pdf20 && v != 5 && !(allowMissingAESV2Length && cfm != nil && *cfm == "AESV2") {
 		return false, fmt.Errorf("%w: crypt filter missing entry \"Length\"", ErrMalformedEncryption)
 	}
 	if v == 4 {
@@ -1323,13 +1324,14 @@ func locateCFEntry(
 	pubKeySecHandler,
 	relaxed bool,
 	allowEFOpen bool,
+	allowMissingAESV2Length bool,
 	specViolations *[]error,
 ) (bool, error) {
 	d1 := d.DictEntry(key)
 	if d1 == nil {
 		return false, fmt.Errorf("%w: entry \"%s\" missing in \"CF\"", ErrMalformedEncryption, key)
 	}
-	return validateCryptFilter(ctx, d1, v, pubKeySecHandler, relaxed, allowEFOpen, specViolations)
+	return validateCryptFilter(ctx, d1, v, pubKeySecHandler, relaxed, allowEFOpen, allowMissingAESV2Length, specViolations)
 }
 
 func validateStmf(
@@ -1339,6 +1341,7 @@ func validateStmf(
 	v int,
 	pubKeySecHandler,
 	relaxed bool,
+	allowMissingAESV2Length bool,
 	specViolations *[]error,
 ) error {
 	n, _, err := ctx.DereferenceNameEntry(d, "StmF")
@@ -1346,7 +1349,7 @@ func validateStmf(
 		return fmt.Errorf("%w: encrypt dict entry \"StmF\": %w", ErrMalformedEncryption, err)
 	}
 	if n != nil && n.Value() != "Identity" {
-		aes, err := locateCFEntry(ctx, cfDict, v, n.Value(), pubKeySecHandler, relaxed, false, specViolations)
+		aes, err := locateCFEntry(ctx, cfDict, v, n.Value(), pubKeySecHandler, relaxed, false, allowMissingAESV2Length, specViolations)
 		if err != nil {
 			return fmt.Errorf("encrypt dict entry \"StmF\": %w", err)
 		}
@@ -1362,6 +1365,7 @@ func validateStrf(
 	v int,
 	pubKeySecHandler,
 	relaxed bool,
+	allowMissingAESV2Length bool,
 	specViolations *[]error,
 ) error {
 	n, _, err := ctx.DereferenceNameEntry(d, "StrF")
@@ -1369,7 +1373,7 @@ func validateStrf(
 		return fmt.Errorf("%w: encrypt dict entry \"StrF\": %w", ErrMalformedEncryption, err)
 	}
 	if n != nil && n.Value() != "Identity" {
-		aes, err := locateCFEntry(ctx, cfDict, v, n.Value(), pubKeySecHandler, relaxed, false, specViolations)
+		aes, err := locateCFEntry(ctx, cfDict, v, n.Value(), pubKeySecHandler, relaxed, false, allowMissingAESV2Length, specViolations)
 		if err != nil {
 			return fmt.Errorf("encrypt dict entry \"StrF\": %w", err)
 		}
@@ -1385,6 +1389,7 @@ func validateEFF(
 	v int,
 	pubKeySecHandler,
 	relaxed bool,
+	allowMissingAESV2Length bool,
 	specViolations *[]error,
 ) error {
 	n, _, err := ctx.DereferenceNameEntry(d, "EFF")
@@ -1392,7 +1397,7 @@ func validateEFF(
 		return fmt.Errorf("%w: encrypt dict entry \"EFF\": %w", ErrMalformedEncryption, err)
 	}
 	if n != nil && n.Value() != "Identity" {
-		aes, err := locateCFEntry(ctx, cfDict, v, n.Value(), pubKeySecHandler, relaxed, true, specViolations)
+		aes, err := locateCFEntry(ctx, cfDict, v, n.Value(), pubKeySecHandler, relaxed, true, allowMissingAESV2Length, specViolations)
 		if err != nil {
 			return fmt.Errorf("encrypt dict entry \"EFF\": %w", err)
 		}
@@ -1406,6 +1411,7 @@ func validateCryptFilters(
 	d types.Dict,
 	v int,
 	pubKeySecHandler bool,
+	allowMissingAESV2Length bool,
 	specViolations *[]error,
 ) error {
 	// validate CF, StmF, StrF, EFF
@@ -1419,15 +1425,15 @@ func validateCryptFilters(
 
 	relaxed := ctx.XRefTable.ValidationMode == model.ValidationRelaxed
 
-	if err := validateStmf(ctx, d, cfDict, v, pubKeySecHandler, relaxed, specViolations); err != nil {
+	if err := validateStmf(ctx, d, cfDict, v, pubKeySecHandler, relaxed, allowMissingAESV2Length, specViolations); err != nil {
 		return err
 	}
 
-	if err := validateStrf(ctx, d, cfDict, v, pubKeySecHandler, relaxed, specViolations); err != nil {
+	if err := validateStrf(ctx, d, cfDict, v, pubKeySecHandler, relaxed, allowMissingAESV2Length, specViolations); err != nil {
 		return err
 	}
 
-	return validateEFF(ctx, d, cfDict, v, pubKeySecHandler, relaxed, specViolations)
+	return validateEFF(ctx, d, cfDict, v, pubKeySecHandler, relaxed, allowMissingAESV2Length, specViolations)
 }
 
 func validateEncryptFilter(ctx *model.Context, d types.Dict) (string, error) {
@@ -1606,17 +1612,21 @@ func supportedEncryption(ctx *model.Context, d types.Dict) (enc *model.Enc, err 
 		return nil, err
 	}
 
-	// CF, StmF, StrF, EFF
-	if v == 4 || v == 5 || v == 6 {
-		if err := validateCryptFilters(ctx, d, v, pubKeySecHandler, &specViolations); err != nil {
-			return nil, err
-		}
-	}
-
 	// R
 	r, err := getR(ctx, d)
 	if err != nil {
 		return nil, err
+	}
+
+	// CF, StmF, StrF, EFF. AESV2 uses the 128-bit document key; only the
+	// explicitly declared Standard V=4/R=4 key permits an omitted local Length.
+	if v == 4 || v == 5 || v == 6 {
+		_, explicitLength := d.Find("Length")
+		allowMissing := v == 4 && r == 4 && !pubKeySecHandler &&
+			l == 128 && explicitLength && ctx.XRefTable.ValidationMode == model.ValidationRelaxed
+		if err := validateCryptFilters(ctx, d, v, pubKeySecHandler, allowMissing, &specViolations); err != nil {
+			return nil, err
+		}
 	}
 
 	// O, U

@@ -1,0 +1,14 @@
+workflow_mode: team-pr
+project_cycle:
+  current_phase: 6
+  completed_phases: [1, 2, 3, 4, 5]
+active_flow: fix_bug
+metrics:
+  story_start: '2026-09-24T16:01:04Z'
+handoff:
+  last_step_completed: independent-fork-review-round-2
+  next_skill: commit-message
+  open_decisions:
+    - Fork-specific private vulnerability reporting is not yet available.
+    - pdfrelay integration remains a separate change.
+    - Do not publish a package, tag, merge, or release without approval.

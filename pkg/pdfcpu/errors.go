@@ -19,7 +19,7 @@ package pdfcpu
 import (
 	"errors"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
 )
 
 // VersionRequirementError reports an element requiring a newer PDF version.

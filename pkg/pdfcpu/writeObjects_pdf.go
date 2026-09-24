@@ -22,7 +22,7 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/types"
 )
 
 func appendPDFObject(dst []byte, obj types.Object) ([]byte, error) {

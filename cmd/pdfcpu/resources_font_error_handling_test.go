@@ -22,7 +22,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/umats/pdfcpu/pkg/api"
 )
 
 func TestHandleInstallFontsCommandPreservesAPIInputErrors(t *testing.T) {

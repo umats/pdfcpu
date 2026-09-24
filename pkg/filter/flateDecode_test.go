@@ -28,7 +28,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/log"
+	"github.com/umats/pdfcpu/pkg/log"
 )
 
 // TestIsCorruptFlateInput verifies the corresponding behavior.

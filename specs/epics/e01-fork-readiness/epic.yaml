@@ -1,0 +1,11 @@
+type: epic
+context: fork readiness
+id: e01
+title: Fork readiness
+status: in_progress
+completed:
+  - Relaxed AESV2 interoperability fix and regression tests
+  - Fork module import-path rename
+  - Go, Windows cross-build, Docker, and user UAT verification
+next_gate: Independent module review before integration
+stories: []

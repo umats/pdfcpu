@@ -26,8 +26,8 @@ import (
 	"runtime/debug"
 	"syscall"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/fault"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/fault"
+	"github.com/umats/pdfcpu/pkg/pdfcpu/model"
 )
 
 // Set by Goreleaser.
