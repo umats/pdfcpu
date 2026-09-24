@@ -1,4 +1,5 @@
 # Exact changed-path manifest relative to pre-rename commit 3048b4ee
+.dockerignore
 .goreleaser.yml
 Dockerfile
 README.md

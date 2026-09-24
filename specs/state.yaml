@@ -7,6 +7,6 @@ handoff:
   last_step_completed: module-rename-and-cross-platform-preflight
   next_skill: verify-work
   open_decisions:
-    - UAT held pending Docker access (default socket belongs to another user).
-    - Review the module rename and AESV2 exception before integration.
+    - Docker image builds and smokes on Colima; await UAT confirmation.
+    - Self-audit passed; independent module review is still required.
     - Do not publish, tag, merge, or release without explicit approval.

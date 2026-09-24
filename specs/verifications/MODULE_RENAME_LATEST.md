@@ -15,7 +15,7 @@
 - Windows amd64 and arm64 `CGO_ENABLED=0 go build ./pkg/... ./internal/...` — PASS.
 - `goreleaser check` — PASS. `git diff --check` — PASS. Changed Go files are gofmt-clean.
 - Exact import audit: all 506 modified Go files matched the former content with only `"github.com/pdfcpu/pdfcpu/` replaced by `"github.com/umats/pdfcpu/`, except 13 Cobra CLI files where gofmt reordered imports. No old first-party Go imports or maintained tooling module paths remain. The full changed-path list is `specs/verifications/CHANGED_FILES_LATEST.txt`; use `git diff 3048b4ee..HEAD` after the documentation checkpoint to inspect the complete diff.
-- Docker image build — NOT RUN: `/var/run/docker.sock` links to another user's Docker Desktop socket, and local Colima is stopped. The Dockerfile builds the local fork from source; `go build ./...` verified Go compilation but not the container stage.
+- Docker image build — PASS on Colima/Linux arm64: `docker build -t pdfcpu-fork-uat .` built the fork from local source. `docker run --rm pdfcpu-fork-uat --help`, `version`, and invalid-flag rejection passed. The legacy Docker builder lacks `--progress`; retry without it passed. Audit found the initial build context was 755.4 MB; `.dockerignore` now excludes `.git`, PDFs, and sample/testdata modules. Rebuild and smoke passed with a 27.74 MB context; the final image contains only `/root/pdfcpu`. No image was pushed.
 - Full test run produced sample output PDFs; restored only files known clean at baseline and removed newly generated sample artifacts. No sample fixtures are part of the change.
 
 ## Remaining review/risk
