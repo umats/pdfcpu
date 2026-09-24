@@ -516,6 +516,7 @@ pkg/pdfcpu/zoom_error_handling_test.go
 pkg/samples/go.mod
 pkg/testdata/go.mod
 specs/FORK_CHANGES.md
+specs/bugs/BUG-2026-09-24T143457-aesv2-crypt-filter-length.md
 specs/security/REVIEW.md
 specs/state.yaml
 specs/tech-architecture/tech-stack.md

@@ -21,7 +21,7 @@ The encryption validator rejects missing local crypt-filter Length before it con
 - [x] Relaxed public read/decrypt succeeds; strict continues to reject.
 - [x] Wrong password and malformed/inconsistent dictionaries remain errors.
 - [x] Decrypted output can be read and validated with synthetic credentials.
-- [ ] Full tests, vet, builds, Windows cross-builds pass after the module rename.
+- [x] Full tests, vet, builds, Windows cross-builds pass after the module rename.
 
 ## Resolution
-Stage 2 focused tests and `go test ./... && go vet ./... && go build ./...` pass before the module rename. A reviewer found a pre-authentication Catalog stream recursion and xref-repair risk; bootstrap now parses Catalog syntax without resolving stream filters or caching undecrypted objects. Unit tests cover cyclic stream-filter syntax, indirect Catalog Version, and corrupt Catalog offset deferral. No production fixtures are used.
+Stage 2 focused tests and full Go preflight pass before and after the module rename. Windows amd64/arm64 builds and Docker image smoke also pass. The user accepted UAT on 2026-09-24. A reviewer found a pre-authentication Catalog stream recursion and xref-repair risk; bootstrap now parses Catalog syntax without resolving stream filters or caching undecrypted objects. Unit tests cover cyclic stream-filter syntax, indirect Catalog Version, and corrupt Catalog offset deferral. No production fixtures are used. Independent review of the module rename remains a separate integration gate.

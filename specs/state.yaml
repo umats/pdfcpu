@@ -1,12 +1,12 @@
 workflow_mode: team-pr
 project_cycle:
-  current_phase: 4
-  completed_phases: [1, 2, 3]
+  current_phase: 6
+  completed_phases: [1, 2, 3, 4, 5]
 active_flow: fix_bug
 handoff:
-  last_step_completed: module-rename-and-cross-platform-preflight
-  next_skill: verify-work
+  last_step_completed: verify-work-cli-and-user-UAT
+  next_skill: request-review
   open_decisions:
-    - Docker image builds and smokes on Colima; await UAT confirmation.
-    - Self-audit passed; independent module review is still required.
-    - Do not publish, tag, merge, or release without explicit approval.
+    - Independent module review is still required before integration.
+    - pdfrelay integration remains a separate change.
+    - Do not publish a package, tag, merge, or release without approval.

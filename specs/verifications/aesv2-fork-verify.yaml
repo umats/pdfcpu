@@ -1,5 +1,5 @@
 story_id: aesv2-fork-compatibility
-verified_at: '2026-09-24T15:42:48Z'
+verified_at: '2026-09-24T15:51:44Z'
 verifier: verify-work-cli
 branch: fix/aesv2-missing-cf-length
 phases:
@@ -36,8 +36,9 @@ phases:
     smoke: help, version, and invalid-flag rejection passed in the image.
     note: Colima/Linux arm64; restricted build context is 27.74 MB.
   manual:
-    confirmed_by_user: false
-    note: Awaiting user review and UAT; no release is authorized.
+    confirmed_by_user: true
+    confirmed_at: '2026-09-24T15:51:44Z'
+    note: User accepted verification; no merge or release was authorized.
   gaps:
     closed: true
     note: Docker socket is available through the Colima context.
