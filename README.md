@@ -30,6 +30,8 @@ improving.
 
 ## Installation
 
+For this fork (not yet released), clone `github.com/umats/pdfcpu` and run `go install ./cmd/pdfcpu` from the checkout. Go API consumers can pin a reviewed fork commit with `go get github.com/umats/pdfcpu@<commit>`. The links below describe upstream releases, not this fork.
+
 | Command-line interface | Go API |
 | --- | --- |
 | **[CLI Installation instructions](https://pdfcpu.io/getting_started/install_cli/?src=github-readme)** | **[API Installation instructions](https://pdfcpu.io/getting_started/install_api/?src=github-readme)** |
@@ -136,7 +138,7 @@ It focuses on correctness, robustness and independence from external dependencie
 * Project documentation: https://pdfcpu.io
 * Changelog: https://pdfcpu.io/changelog
 * [Contributing guidelines](CONTRIBUTING.md)
-* [Security policy](SECURITY.md)
+* [Upstream security policy; fork-specific private reporting pending](SECURITY.md)
 
 ### CLI
 

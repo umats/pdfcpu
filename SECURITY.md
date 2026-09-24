@@ -1,5 +1,7 @@
 # Security Policy
 
+This is the upstream pdfcpu policy retained for reference. Its reporting addresses and response commitments belong to upstream, not the `github.com/umats/pdfcpu` fork. A private reporting channel for fork-specific vulnerabilities has not yet been established; do not disclose them in public issues or assume upstream will maintain this fork.
+
 ## Scope and security fixes
 
 This policy covers the pdfcpu Go library, CLI, official release binaries and dependencies included in those artifacts.
