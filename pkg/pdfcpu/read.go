@@ -4216,8 +4216,8 @@ func bootstrapCatalogVersion(c context.Context, ctx *model.Context) error {
 		if ref, ok := version.(types.IndirectRef); ok {
 			entry, found := ctx.XRefTable.FindTableEntryForIndRef(&ref)
 			if found && entry != nil && entry.Offset != nil && entry.Generation != nil {
-				name, _, stream, _, err := object(c, ctx, *entry.Offset, ref.ObjectNumber.Value(), *entry.Generation)
-				if err == nil && stream < 0 {
+				name, end, stream, _, err := object(c, ctx, *entry.Offset, ref.ObjectNumber.Value(), *entry.Generation)
+				if err == nil && (stream < 0 || end >= 0 && stream > end) {
 					if name, ok := name.(types.Name); ok {
 						d = types.Dict{"Version": name}
 					}

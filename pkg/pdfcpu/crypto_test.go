@@ -416,7 +416,7 @@ func TestBootstrapCatalogVersionLeavesCorruptOffsetToRepair(t *testing.T) {
 }
 
 func TestBootstrapCatalogVersionIndirectName(t *testing.T) {
-	pdf := []byte("1 0 obj\n<</Type/Catalog/Version 2 0 R>>\nendobj\n2 0 obj\n/2.0\nendobj\n")
+	pdf := []byte("1 0 obj\n<</Type/Catalog/Version 2 0 R>>\nendobj\n2 0 obj\n/2.0\nendobj\n3 0 obj\n<</Length 0>>\nstream\n\nendstream\nendobj\n")
 	ctx, err := model.NewContext(bytes.NewReader(pdf), nil)
 	if err != nil {
 		t.Fatal(err)
