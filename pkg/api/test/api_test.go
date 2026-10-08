@@ -64,9 +64,20 @@ func TestMain(m *testing.M) {
 	samplesDir = filepath.Join("..", "..", "samples")
 
 	var err error
-	conf, err = api.LoadConfiguration(api.ConfigurationOptions{Mode: api.ConfigurationModeAuto})
+	if outDir, err = os.MkdirTemp("", "pdfcpu_api_tests"); err != nil {
+		fmt.Printf("%v", err)
+		os.Exit(1)
+	}
+	// Keep installation and legacy default-configuration callers in this test binary's private store.
+	if err := model.EnsureDefaultConfigAt(outDir, false); err != nil {
+		fmt.Fprintf(os.Stderr, "initialize test configuration: %v\n", err)
+		os.RemoveAll(outDir)
+		os.Exit(1)
+	}
+	conf, err = api.LoadConfiguration(api.ConfigurationOptions{Root: outDir, Mode: api.ConfigurationModeAuto})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load test configuration: %v\\n", err)
+		os.RemoveAll(outDir)
 		os.Exit(1)
 	}
 	// Font installation still uses the process-wide font directory.
@@ -80,19 +91,15 @@ func TestMain(m *testing.M) {
 	fonts, err := userFonts(filepath.Join(inDir, "fonts"))
 	if err != nil {
 		fmt.Printf("%v", err)
+		os.RemoveAll(outDir)
 		os.Exit(1)
 	}
 
 	if err := api.InstallFonts(context.Background(), fonts); err != nil {
 		fmt.Printf("%v", err)
+		os.RemoveAll(outDir)
 		os.Exit(1)
 	}
-
-	if outDir, err = os.MkdirTemp("", "pdfcpu_api_tests"); err != nil {
-		fmt.Printf("%v", err)
-		os.Exit(1)
-	}
-	// fmt.Printf("outDir = %s\n", outDir)
 
 	exitCode := m.Run()
 
@@ -102,6 +109,28 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Exit(exitCode)
+}
+
+// TestMainFontStoreIsPrivate guards against cross-package font replacement during parallel tests.
+func TestMainFontStoreIsPrivate(t *testing.T) {
+	want := filepath.Join(outDir, "pdfcpu", "fonts")
+	for name, config := range map[string]*model.Configuration{
+		"suite":          conf,
+		"legacy default": model.NewDefaultConfiguration(),
+	} {
+		dir, available := config.UserFontStore()
+		if !available || dir != want {
+			t.Fatalf("%s font store = %q, available=%t; want private %q", name, dir, available, want)
+		}
+	}
+	if font.UserFontDir != want {
+		t.Fatalf("font installation directory = %q; want %q", font.UserFontDir, want)
+	}
+	for _, name := range []string{"UnifontMedium.gob", "UnifontUpperMedium.gob"} {
+		if _, err := os.Stat(filepath.Join(want, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func copyFile(t *testing.T, srcFileName, destFileName string) error {
