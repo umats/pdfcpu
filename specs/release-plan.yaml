@@ -3,7 +3,11 @@ context: fork readiness
 release:
   version: v0.16.0-rc.1.umats.1
   status: planning
-  note: Proposed fork version only; no tag or publication authorized.
+  note: >-
+    Historical fork-readiness proposal only; no tag or publication authorized.
+    Phase 5 plaintext-hint verification passed with owner confirmation;
+    Phase 6 is preparation-only. Commit/PR/merge/publication and a fix
+    version remain unapproved. See the release-preparation verification.
 epics:
   - id: e01
     title: Fork readiness

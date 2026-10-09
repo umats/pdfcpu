@@ -7,5 +7,8 @@ completed:
   - Relaxed AESV2 interoperability fix and regression tests
   - Fork module import-path rename
   - Go, Windows cross-build, Docker, and user UAT verification
-next_gate: Independent module review before integration
+next_gate: >-
+  Phase 6 release preparation only, after owner-confirmed Phase 5.
+  Resolve coverage, API/version and PR-base gates; commits, push, PR,
+  merge and publication still need separate explicit authorization.
 stories: []

@@ -47,6 +47,12 @@
 - MUST stop forward work when Preflight or CI is red.
 - DO fix defects early: a development fix costs less than a production fix.
 
+## Release Coverage Policy
+
+- ALWAYS waive aggregate percentage-based release coverage thresholds for this project (including generic 80% overall / 95% core gates).
+- MUST retain measured coverage as owner-waived, never as a passing percentage gate.
+- MUST retain tests, regression evidence, security/acceptance, CI and API compatibility gates. This waiver does not authorize integration or publication.
+
 ## Discovered Defects
 
 - MUST run the fix-or-log ladder for reproducible gate failures.
@@ -55,6 +61,11 @@
 - MUST log blocked reproductions in `specs/bugs/` and stop forward work until triaged.
 - MUST ship discovered fixes in separate Conventional Commits within the same PR.
 - MUST NOT dismiss red gates as pre-existing, unrelated, not introduced here, or out of scope.
+
+## Session Metadata
+
+- NEVER persist provider-rejection blockers or provider-based no-retry instructions in `specs/`.
+- DO record unresolved code findings and actual verification results.
 
 ## Defensive Code
 
