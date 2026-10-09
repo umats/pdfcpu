@@ -11,7 +11,7 @@ project_cycle:
     - 5
 active_flow: release_branch
 release_cycle:
-  stage: source_committed_team_pr_pending
+  stage: team_pr_open_ci_pending
   phase5_owner_confirmed: true
   workflow: team-pr
   commit_authorized: true
@@ -19,6 +19,10 @@ release_cycle:
   pr_authorized: true
   repository: umats/pdfcpu
   source_commits: [05de1219, 6e083295]
+  metadata_commit: 563589d2
+  pr_number: 3
+  pr_url: https://github.com/umats/pdfcpu/pull/3
+  ci_verified: false
   merge_authorized: false
   tag_publish_authorized: false
   version_approved: false
@@ -69,7 +73,7 @@ metrics:
       total_seconds: 159.0
       avg_seconds: 53.0
 handoff:
-  last_step_completed: reviewed-source-and-native32-fixes-committed
+  last_step_completed: fork-pr3-opened-no-merge
   next_skill: release-branch
   paused: false
   resume_note: >-
@@ -79,7 +83,8 @@ handoff:
     feature-branch push and team PR in umats/pdfcpu against master.
     No merge, tag, package publication, migration or rollout authorized.
     Reader fix 05de1219 and native32 test fix 6e083295 committed separately.
-    Metadata commit/push/PR next; no generated samples/runtime logs included.
+    Metadata 563589d2 committed and pushed; fork PR3 opened against master.
+    No generated samples/runtime logs included. CI pending, not claimed green.
     Owner permanently waives aggregate coverage percentage thresholds; measured
     74.8730% overall and 74.2648% core remain recorded, not called PASS.
     Tests/security/CI/API and integration approvals remain required.
@@ -93,6 +98,7 @@ handoff:
     - specs/verifications/plaintext-hint-orchestration.md
     - specs/verifications/plaintext-hint-release-preparation.md
     - specs/verifications/plaintext-hint-release-gates.md
+    - specs/verifications/plaintext-hint-publication.md
     - specs/bugs/BUG-release-coverage-gate.md
     - specs/verifications/plaintext-hint-round13-acceptance.md
     - specs/verifications/plaintext-hint-completeness.md

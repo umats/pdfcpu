@@ -13,7 +13,8 @@ publication, migration, consumer integration or rollout authority.
 
 - `05de1219`: reader fix and all 34 directly related source/regression paths.
 - `6e083295`: separate native32 unsigned-permission test compilation fix.
-- Approved specs/conventions/ignore metadata follows in a separate docs commit.
+- `563589d2`: approved specs/conventions/ignore metadata.
+- PR creation checkpoint follows in a docs-only handoff commit.
 
 Accepted source hashes match round13 candidate; final original whole-manifest
 check differs only in `CONVENTIONS.md` because of the explicit standing owner
@@ -40,8 +41,10 @@ Module hygiene passes without project dependency changes.
 Use explicit `--repo umats/pdfcpu` for gh commands: implicit gh selected the
 parent. Origin fork master was fetched and matches the original baseline.
 Fork latest release is v0.15.1, not the parent's v0.16.1. No existing feature PR
-was found before creation. Push/PR/CI receipts will be captured privately;
-CI is not yet claimed green. No merge or release until separately authorized.
+was found before creation. All three commits pushed to the feature branch;
+opened https://github.com/umats/pdfcpu/pull/3 against master. Push/PR/CI receipts
+are private under `.pi-herdsman/hint-publication/`. CI is pending, not claimed
+green. No merge or release until separately authorized.
 
 Production input remains absent; no Annex F, production, full386-suite or
 performance claim. Two historical consumer failures remain unexplained.
