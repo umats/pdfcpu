@@ -205,6 +205,9 @@ type ReadContext struct {
 	RS                  io.ReadSeeker // Input read seeker.
 	EolCount            int           // 1 or 2 characters used for eol.
 	RepairOffset        int64
+	RepairedXRef        bool         // Reader repaired an xref; hint compatibility is ineligible.
+	TrailerDicts        []types.Dict // Structural trailer origins retained for hint reference auditing.
+	RepairedHints       types.IntSet // Plaintext hints needing encrypted replacement in increments.
 	BinaryTotalSize     int64        // total stream data
 	BinaryImageSize     int64        // total image stream data
 	BinaryFontSize      int64        // total font stream data (fontfiles)
