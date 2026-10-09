@@ -152,6 +152,27 @@ func trimLeftSpace(s string, relaxed bool) (string, bool) {
 	return s, eol
 }
 
+// trimParseSpace audits only consumed separators, never comment or string payload.
+func trimParseSpace(c context.Context, s string, relaxed bool) (string, bool) {
+	remaining := s
+	for {
+		n := strings.TrimLeftFunc(remaining, func(r rune) bool {
+			if r != 0 && !unicode.IsSpace(r) {
+				return false
+			}
+			if !strings.ContainsRune("\x00\t\n\f\r ", r) {
+				contextutil.ParseProvenanceFromContext(c).MarkRepair()
+			}
+			return true
+		})
+		if len(n) <= 1 || n[0] != '%' {
+			break
+		}
+		remaining, _ = positionToNextEOL(n)
+	}
+	return trimLeftSpace(s, relaxed)
+}
+
 // HexString validates and formats a hex string to be of even length.
 func hexString(s string) (*string, bool) {
 	if len(s) == 0 {
@@ -368,7 +389,7 @@ func parseArray(c context.Context, line *string, level, maxDepth int, relaxed bo
 	l = forwardParseBuf(l, 1)
 
 	// position to first non whitespace char after '['
-	l, _ = trimLeftSpace(l, false)
+	l, _ = trimParseSpace(c, l, false)
 
 	if len(l) == 0 {
 		// only whitespace after '['
@@ -394,7 +415,7 @@ func parseArray(c context.Context, line *string, level, maxDepth int, relaxed bo
 		}
 
 		// position to next non whitespace char.
-		l, _ = trimLeftSpace(l, false)
+		l, _ = trimParseSpace(c, l, false)
 		if len(l) == 0 {
 			return nil, errArrayNotTerminated
 		}
@@ -469,7 +490,7 @@ func parseStringLiteral(line *string) (types.Object, error) {
 	return stringLiteral, nil
 }
 
-func parseHexLiteral(line *string) (types.Object, error) {
+func parseHexLiteral(c context.Context, line *string) (types.Object, error) {
 	if line == nil || len(*line) == 0 {
 		return nil, errBufNotAvailable
 	}
@@ -492,8 +513,15 @@ func parseHexLiteral(line *string) (types.Object, error) {
 		return nil, errHexLiteralNotTerminated
 	}
 
-	hexStr, ok := hexString(strings.TrimSpace(l[:eov]))
+	hexInput := l[:eov]
+	for _, r := range hexInput {
+		if unicode.IsSpace(r) && !strings.ContainsRune("\x00\t\n\f\r ", r) {
+			contextutil.ParseProvenanceFromContext(c).MarkRepair()
+		}
+	}
+	hexStr, ok := hexString(strings.TrimSpace(hexInput))
 	if !ok {
+		contextutil.ParseProvenanceFromContext(c).MarkRepair()
 		// Skip junk
 		*line = forwardParseBuf(l[eov:], 1)
 		return nil, nil
@@ -555,7 +583,7 @@ func parseName(line *string) (*types.Name, error) {
 	return &nameObj, nil
 }
 
-func insertKey(d types.Dict, key string, val types.Object, relaxed bool) error {
+func insertKey(c context.Context, d types.Dict, key string, val types.Object, relaxed bool) error {
 	if _, found := d[key]; !found {
 		d[key] = val
 	} else {
@@ -567,7 +595,11 @@ func insertKey(d types.Dict, key string, val types.Object, relaxed bool) error {
 		// }
 
 		d[key] = val
-		ShowDigestedSpecViolation(fmt.Sprintf("duplicate key \"%s\"", key))
+		provenance := contextutil.ParseProvenanceFromContext(c)
+		provenance.MarkDuplicate()
+		if !contextutil.ParseNoticesSuppressed(c) {
+			ShowDigestedSpecViolation(fmt.Sprintf("duplicate key \"%s\"", key))
+		}
 	}
 
 	if log.ParseEnabled() {
@@ -585,6 +617,11 @@ func processDictKeys(c context.Context, line *string, level, maxDepth int, relax
 	l := *line
 	var eol bool
 	d := types.NewDict()
+	provenance := contextutil.ParseProvenanceFromContext(c)
+	var seen map[string]bool
+	if provenance != nil {
+		seen = map[string]bool{}
+	}
 
 	for dictString(l) {
 
@@ -606,7 +643,7 @@ func processDictKeys(c context.Context, line *string, level, maxDepth int, relax
 		}
 
 		// Position to first non whitespace after key.
-		l, eol = trimLeftSpace(l, relaxed)
+		l, eol = trimParseSpace(c, l, relaxed)
 
 		if err != nil && relaxed {
 			// Skip junk.
@@ -629,10 +666,19 @@ func processDictKeys(c context.Context, line *string, level, maxDepth int, relax
 			}
 		}
 
+		// Track encountered names, including null entries, independently of
+		// retained values without changing ordinary parsing or its notices.
+		if provenance != nil {
+			key := string(*keyName)
+			if seen[key] {
+				provenance.MarkDuplicate()
+			}
+			seen[key] = true
+		}
 		// Specifying the null object as the value of a dictionary entry (7.3.7, "Dictionary Objects")
 		// shall be equivalent to omitting the entry entirely.
 		if val != nil {
-			if err := insertKey(d, string(*keyName), val, relaxed); err != nil {
+			if err := insertKey(c, d, string(*keyName), val, relaxed); err != nil {
 				return nil, err
 			}
 		}
@@ -643,7 +689,7 @@ func processDictKeys(c context.Context, line *string, level, maxDepth int, relax
 		}
 
 		// Position to next non whitespace char.
-		l, _ = trimLeftSpace(l, false)
+		l, _ = trimParseSpace(c, l, false)
 		if len(l) == 0 {
 			return nil, errDictionaryNotTerminated
 		}
@@ -672,7 +718,7 @@ func parseDict(c context.Context, line *string, level, maxDepth int, relaxed boo
 	l = forwardParseBuf(l, 2)
 
 	// position to first non whitespace char after '<<'
-	l, _ = trimLeftSpace(l, false)
+	l, _ = trimParseSpace(c, l, false)
 
 	if len(l) == 0 {
 		// only whitespace after '['
@@ -745,7 +791,7 @@ func isRangeError(err error) bool {
 	return false
 }
 
-func parseIndRef(s, l, l1 string, line *string, i, i2 int) (types.Object, error) {
+func parseIndRef(c context.Context, s, l, l1 string, line *string, i, i2 int) (types.Object, error) {
 	g, err := strconv.Atoi(s)
 	if err != nil {
 		// 2nd int(generation number) not available.
@@ -758,7 +804,7 @@ func parseIndRef(s, l, l1 string, line *string, i, i2 int) (types.Object, error)
 	}
 
 	l = l[i2:]
-	l, _ = trimLeftSpace(l, false)
+	l, _ = trimParseSpace(c, l, false)
 
 	if len(l) == 0 {
 		// only whitespace
@@ -767,6 +813,9 @@ func parseIndRef(s, l, l1 string, line *string, i, i2 int) (types.Object, error)
 	}
 
 	if l[0] == 'R' {
+		if !contextutil.PDFTokenBoundary(l, 1) {
+			contextutil.ParseProvenanceFromContext(c).MarkRepair()
+		}
 		*line = forwardParseBuf(l, 1)
 		// We have all 3 components to create an indirect reference.
 		return *types.NewIndirectRef(i, g), nil
@@ -782,7 +831,7 @@ func parseIndRef(s, l, l1 string, line *string, i, i2 int) (types.Object, error)
 	return types.Integer(i), nil
 }
 
-func parseFloat(s string) (types.Object, error) {
+func parseFloat(c context.Context, s string) (types.Object, error) {
 	// Replace ',' with '.' to accept comma as decimal separator
 	s = strings.Replace(s, ",", ".", 1)
 
@@ -793,6 +842,7 @@ func parseFloat(s string) (types.Object, error) {
 		f, err := strconv.ParseFloat(s, 64)
 		if err != nil {
 			// Skip junk
+			contextutil.ParseProvenanceFromContext(c).MarkRepair()
 			return nil, nil
 		}
 		if log.ParseEnabled() {
@@ -807,7 +857,7 @@ func parseFloat(s string) (types.Object, error) {
 	return types.Float(f), nil
 }
 
-func parseNumericOrIndRef(line *string) (types.Object, error) {
+func parseNumericOrIndRef(c context.Context, line *string) (types.Object, error) {
 	if noBuf(line) {
 		return nil, errBufNotAvailable
 	}
@@ -818,18 +868,37 @@ func parseNumericOrIndRef(line *string) (types.Object, error) {
 	// otherwise it has to be a float
 	// we have to check first for integer
 	s, l1, i1 := startParseNumericOrIndRef(l)
+	// The ordinary parser accepts several malformed numeric spellings.
+	// Record lexical normalization without changing the resulting value.
+	token := l[:len(l)-len(l1)]
+	digits, dots := 0, 0
+	for i, b := range []byte(token) {
+		switch {
+		case b >= '0' && b <= '9':
+			digits++
+		case b == '.':
+			dots++
+		case i == 0 && (b == '+' || b == '-'):
+		default:
+			contextutil.ParseProvenanceFromContext(c).MarkRepair()
+		}
+	}
+	if token != s || digits == 0 || dots > 1 {
+		contextutil.ParseProvenanceFromContext(c).MarkRepair()
+	}
 
 	// Try int
 	i, err := strconv.Atoi(s)
 	if err != nil {
 		if isRangeError(err) {
+			contextutil.ParseProvenanceFromContext(c).MarkRepair()
 			// #407
 			i = 0
 			*line = l1
 			return types.Integer(i), nil
 		}
 		*line = l1
-		return parseFloat(s)
+		return parseFloat(c, s)
 	}
 
 	// We have an Int!
@@ -847,7 +916,7 @@ func parseNumericOrIndRef(line *string) (types.Object, error) {
 	// Missing is the 2nd int and "R".
 
 	l = l[i1:]
-	l, _ = trimLeftSpace(l, false)
+	l, _ = trimParseSpace(c, l, false)
 	if len(l) == 0 {
 		// only whitespace
 		*line = l1
@@ -871,7 +940,7 @@ func parseNumericOrIndRef(line *string) (types.Object, error) {
 		s = l[:i2]
 	}
 
-	return parseIndRef(s, l, l1, line, i, i2)
+	return parseIndRef(c, s, l, l1, line, i, i2)
 }
 
 func parseHexLiteralOrDict(c context.Context, l *string, level, maxDepth int, relaxed bool) (val types.Object, err error) {
@@ -897,7 +966,7 @@ func parseHexLiteralOrDict(c context.Context, l *string, level, maxDepth int, re
 		if log.ParseEnabled() {
 			log.Parse.Println("parseHexLiteralOrDict: value = Hex Literal")
 		}
-		if val, err = parseHexLiteral(l); err != nil {
+		if val, err = parseHexLiteral(c, l); err != nil {
 			return nil, err
 		}
 	}
@@ -979,6 +1048,9 @@ func parseObjectValue(c context.Context, l *string, level, depthLimit int, relax
 	default:
 		value, valStr, ok := parseBooleanOrNull(*l)
 		if ok {
+			if (*l)[:len(valStr)] != valStr || !contextutil.PDFTokenBoundary(*l, len(valStr)) {
+				contextutil.ParseProvenanceFromContext(c).MarkRepair()
+			}
 			*l = forwardParseBuf(*l, len(valStr))
 			return value, nil
 		}
@@ -986,7 +1058,7 @@ func parseObjectValue(c context.Context, l *string, level, depthLimit int, relax
 		// int 0 r
 		// int
 		// float
-		return parseNumericOrIndRef(l)
+		return parseNumericOrIndRef(c, l)
 	}
 }
 
@@ -1009,7 +1081,7 @@ func parseObject(c context.Context, line *string, level, depthLimit int, relaxed
 	}
 
 	// position to first non whitespace char
-	l, _ = trimLeftSpace(l, false)
+	l, _ = trimParseSpace(c, l, false)
 	if len(l) == 0 {
 		// only whitespace
 		return nil, errBufNotAvailable
@@ -1062,6 +1134,7 @@ func ParseObjectWithPolicy(c context.Context, line *string, level, validationMod
 		return ParseObjectResult{}, err
 	}
 	if !policyManagedParseError(err) {
+		contextutil.ParseProvenanceFromContext(c).MarkFallback()
 		*line = original
 		value, err = parseObject(c, line, level, depthLimit, true)
 		return ParseObjectResult{Object: value}, err
@@ -1072,6 +1145,7 @@ func ParseObjectWithPolicy(c context.Context, line *string, level, validationMod
 		return result, err
 	}
 
+	contextutil.ParseProvenanceFromContext(c).MarkFallback()
 	*line = original
 	result.Object, err = parseObject(c, line, level, depthLimit, true)
 	return result, err
@@ -1094,6 +1168,7 @@ func ParseObject(c context.Context, line *string, level int, maxDepth ...int) (t
 		return value, err
 	}
 
+	contextutil.ParseProvenanceFromContext(c).MarkFallback()
 	*line = original
 	return parseObject(c, line, level, depthLimit, true)
 }

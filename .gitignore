@@ -13,3 +13,6 @@ _scripts/*.csv
 
 # GoReleaser
 dist/*
+
+# Agent runtime evidence
+/.pi-herdsman/

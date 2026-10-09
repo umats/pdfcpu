@@ -187,9 +187,19 @@ func Read(c context.Context, rs io.ReadSeeker, conf *model.Configuration) (*mode
 		}
 	}
 
+	// Preserve ordinary parsing semantics while retaining ambiguity from
+	// every trailer/object origin, including later lazy materialization.
+	c = contextutil.WithParseProvenance(c, &contextutil.ParseProvenance{})
+
 	// Populate xRefTable.
 	if err = readXRefTable(c, ctx); err != nil {
 		return nil, fmt.Errorf("xref table: %w", err)
+	}
+
+	// Detect effective trailer Size repair before hint authorization. Keep
+	// the existing Size correction after ordinary object loading below.
+	if ctx.XRefTable.Size == nil || *ctx.XRefTable.Size != maxObjectNumber(ctx.Table)+1 {
+		ctx.Read.RepairedXRef = true
 	}
 
 	// Make all objects explicitly available (load into memory) in corresponding xRefTable entries.
@@ -302,9 +312,22 @@ func offsetLastXRefSection(ctx *model.Context, skip int64) (*int64, error) {
 			return nil, errMissingXRefEOF
 		}
 
+		// Substring discovery must not treat a marker inside a comment or
+		// discarded same-line prefix as exact epilogue framing.
+		lineStart := strings.LastIndexAny(string(workBuf[:j]), "\r\n") + 1
+		for _, b := range workBuf[lineStart:j] {
+			if !contextutil.PDFWhitespace(rune(b)) {
+				ctx.Read.RepairedXRef = true
+			}
+		}
+		if !contextutil.PDFWhitespace(rune(workBuf[start])) ||
+			(j > 0 && !contextutil.PDFTokenBoundary(string(workBuf), j-1)) {
+			ctx.Read.RepairedXRef = true
+		}
 		p := workBuf[start+1:]
 		posEOF := strings.Index(string(p), "%%EOF")
 		if posEOF < 0 {
+			ctx.Read.RepairedXRef = true
 			posEOF = incrEpilogIndex(string(p))
 			if posEOF < 0 {
 				return nil, errMissingXRefEOF
@@ -312,11 +335,18 @@ func offsetLastXRefSection(ctx *model.Context, skip int64) (*int64, error) {
 		}
 
 		p = p[:posEOF]
+		auditXRefWhitespace(string(p), &ctx.Read.RepairedXRef)
 		s := strings.TrimSpace(string(p))
+		if strings.HasSuffix(s, "%") {
+			ctx.Read.RepairedXRef = true
+		}
 		s = strings.TrimSpace(strings.TrimRight(s, "%"))
 		offset, err = strconv.ParseInt(s, 10, 64)
 		if err != nil {
 			return nil, errInvalidLastXRefSection
+		}
+		if offset == 0 || offset >= ctx.Read.FileSize {
+			ctx.Read.RepairedXRef = true
 		}
 		if offset >= ctx.Read.FileSize {
 			offset = 0
@@ -403,7 +433,7 @@ func decodeSubsection(fields []string) (int64, int, string, error) {
 }
 
 // Read next subsection entry and generate corresponding xref table entry.
-func parseXRefTableEntry(xRefTable *model.XRefTable, fields []string, objNr int, offExtra int64, incr int) error {
+func parseXRefTableEntry(xRefTable *model.XRefTable, fields []string, objNr int, offExtra int64, incr int, unreliable ...*bool) error {
 	if log.ReadEnabled() {
 		log.Read.Println("parseXRefTableEntry: begin")
 	}
@@ -413,6 +443,11 @@ func parseXRefTableEntry(xRefTable *model.XRefTable, fields []string, objNr int,
 		return err
 	}
 
+	if len(unreliable) > 0 && (len(fields[0]) != 10 || len(fields[1]) != 5 ||
+		strings.Trim(fields[0], "0123456789") != "" || strings.Trim(fields[1], "0123456789") != "" ||
+		(entryType == "n" && offset < 9)) {
+		*unreliable[0] = true
+	}
 	if entryType == "n" && objNr > 0 && offset == 0 {
 		err := model.WithValidationErrorObject(errors.New("in-use xref entry has offset 0"), objNr)
 		if xRefTable.ValidationMode == model.ValidationStrict {
@@ -474,11 +509,28 @@ func xRefTableObjectNumber(startObjNumber, index, entryCount int, limits model.R
 	return startObjNumber + index, nil
 }
 
+// auditXRefWhitespace examines raw consumed separators, before Fields/TrimSpace
+// erases them. Call only on xref framing, never dictionary/string/comment payload.
+func auditXRefWhitespace(line string, unreliable ...*bool) {
+	if len(unreliable) == 0 {
+		return
+	}
+	for _, r := range line {
+		if unicode.IsSpace(r) && !contextutil.PDFWhitespace(r) {
+			*unreliable[0] = true
+		}
+	}
+}
+
 // Process xRef table subsection and create corresponding xRef table entries.
-func parseXRefTableSubSection(xRefTable *model.XRefTable, limits model.ResourceLimits, s *bufio.Scanner, fields []string, offExtra int64, incr int) (string, error) {
+func parseXRefTableSubSection(xRefTable *model.XRefTable, limits model.ResourceLimits, s *bufio.Scanner, fields []string, offExtra int64, incr int, unreliable ...*bool) (string, error) {
 	var line string
 	trailer := false
 	entryCount := 0
+	// This call consumes one section, including all its subsections. Older
+	// revisions may repeat numbers; assignments within this section may not
+	// establish trustworthy hint provenance.
+	seen := types.IntSet{}
 
 	for !trailer && len(fields) == 2 {
 
@@ -498,6 +550,9 @@ func parseXRefTableSubSection(xRefTable *model.XRefTable, limits model.ResourceL
 				return "", err
 			}
 
+			if !strings.HasPrefix(strings.TrimSpace(line), "trailer") {
+				auditXRefWhitespace(line, unreliable...)
+			}
 			fields = strings.Fields(line)
 			if len(fields) != 3 {
 				if i < objCount {
@@ -512,6 +567,18 @@ func parseXRefTableSubSection(xRefTable *model.XRefTable, limits model.ResourceL
 				return "", err
 			}
 			entryCount++
+			if seen[objNr] && len(unreliable) > 0 {
+				*unreliable[0] = true
+			}
+			seen[objNr] = true
+			// Audit each section's records before applying older-revision
+			// precedence. Ignored origins still affect authorization reliability.
+			if len(unreliable) > 0 && (i >= objCount || len(fields[0]) != 10 || len(fields[1]) != 5 ||
+				strings.Trim(fields[0], "0123456789") != "" || strings.Trim(fields[1], "0123456789") != "" ||
+				(fields[2] != "n" && fields[2] != "f") ||
+				(fields[2] == "n" && fields[0] < "0000000009")) {
+				*unreliable[0] = true
+			}
 
 			if xRefTable.Exists(objNr) {
 				if log.ReadEnabled() {
@@ -522,13 +589,19 @@ func parseXRefTableSubSection(xRefTable *model.XRefTable, limits model.ResourceL
 			}
 
 			if len(fields[0]) == 1 { // should be 10
+				if len(unreliable) > 0 {
+					*unreliable[0] = true
+				}
 				continue
 			}
 
 			if i >= objCount {
+				if len(unreliable) > 0 {
+					*unreliable[0] = true
+				}
 				model.ShowMsg(fmt.Sprintf("digesting extra XrefTable entry for obj#%d", objNr))
 			}
-			if err = parseXRefTableEntry(xRefTable, fields, objNr, offExtra, incr); err != nil {
+			if err = parseXRefTableEntry(xRefTable, fields, objNr, offExtra, incr, unreliable...); err != nil {
 				return "", err
 			}
 		}
@@ -537,17 +610,39 @@ func parseXRefTableSubSection(xRefTable *model.XRefTable, limits model.ResourceL
 	return line, nil
 }
 
+// markObjectRemainder applies only at complete structural boundaries, never
+// the public parse-next-value API. Preserve acceptance but do not authorize
+// hints when discarded syntax could contain invisible incoming references.
+func markObjectRemainder(c context.Context, s string) {
+	for len(s) > 0 {
+		if strings.ContainsRune("\x00\t\n\f\r ", rune(s[0])) {
+			s = s[1:]
+			continue
+		}
+		if s[0] != '%' {
+			contextutil.ParseProvenanceFromContext(c).MarkRepair()
+			return
+		}
+		i := strings.IndexAny(s, "\r\n")
+		if i < 0 {
+			return
+		}
+		s = s[i:]
+	}
+}
+
 // Parse compressed object.
-func compressedObject(c context.Context, s string) (types.Object, error) {
+func compressedObject(c context.Context, s string, maxDepth ...int) (types.Object, error) {
 	if log.ReadEnabled() {
 		log.Read.Println("compressedObject: begin")
 	}
 
-	o, err := model.ParseObject(c, &s, 0)
+	o, err := model.ParseObject(c, &s, 0, maxDepth...)
 	if err != nil {
 		return nil, err
 	}
 
+	markObjectRemainder(c, s)
 	d, ok := o.(types.Dict)
 	if !ok {
 		// return trivial Object: Integer, Array, etc.
@@ -569,14 +664,166 @@ func compressedObject(c context.Context, s string) (types.Object, error) {
 	return nil, errObjectStreamContainsStream
 }
 
+// lexicalCutState tracks only framing state, not PDF values. It is used on
+// already bounded decoded origins so a slice EOF cannot terminate a token,
+// comment, string, or open container. Each audit scans only its bounded slice.
+func lexicalCutState(c context.Context, b []byte, start, end int) (byte, error) {
+	var mode byte
+	depth, containers := 0, 0
+	escaped := false
+	for i := start; i < end; i++ {
+		if (i-start)%4096 == 0 {
+			if err := c.Err(); err != nil {
+				return 0, err
+			}
+		}
+		ch := b[i]
+		switch mode {
+		case 'c':
+			if ch == '\r' || ch == '\n' {
+				mode = 0
+			}
+			continue
+		case 's':
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == '(' {
+				depth++
+			}
+			if ch == ')' {
+				depth--
+				if depth == 0 {
+					mode = 0
+				}
+			}
+			continue
+		case 'h':
+			if ch == '>' {
+				mode = 0
+			}
+			continue
+		case 'r', 'n':
+			if !contextutil.PDFTokenBoundary(string(b[i:i+1]), 0) {
+				continue
+			}
+			mode = 0
+		}
+		switch ch {
+		case '%':
+			mode = 'c'
+		case '/':
+			mode = 'n'
+		case '(':
+			mode, depth = 's', 1
+		case '<':
+			if i+1 < end && b[i+1] == '<' {
+				containers++
+				i++
+			} else {
+				mode = 'h'
+			}
+		case '>':
+			if i+1 < end && b[i+1] == '>' {
+				containers--
+				i++
+			}
+		case '[':
+			containers++
+		case ']':
+			containers--
+		default:
+			if !contextutil.PDFWhitespace(rune(ch)) {
+				mode = 'r'
+			}
+		}
+	}
+	if containers != 0 {
+		return 'u', nil
+	}
+	return mode, c.Err()
+}
+
+func auditObjectStreamCut(c context.Context, b []byte, start, end int) error {
+	if start < 0 || end < start || end > len(b) {
+		contextutil.ParseProvenanceFromContext(c).MarkRepair()
+		return nil
+	}
+	mode, err := lexicalCutState(c, b, start, end)
+	if err != nil {
+		return err
+	}
+	valid := mode == 0
+	if mode == 'c' {
+		valid = end == len(b) || b[end] == '\r' || b[end] == '\n'
+	}
+	if mode == 'r' || mode == 'n' {
+		valid = end == len(b) || contextutil.PDFTokenBoundary(string(b[end:end+1]), 0)
+	}
+	if !valid {
+		contextutil.ParseProvenanceFromContext(c).MarkRepair()
+	}
+	return nil
+}
+
+// objectStreamOffset checks PDF-controlled offsets before conversion or slicing.
+func objectStreamOffset(relative, first int) (int, error) {
+	if relative < 0 || first < 0 {
+		return 0, errCorruptObjectStreamDict
+	}
+	if relative > int(^uint(0)>>1)-first {
+		return 0, fmt.Errorf("object stream offset overflow: %w", filter.ErrDecodeLimitExceeded)
+	}
+	return relative + first, nil
+}
+
+// Private partial decodes must enforce the budget themselves: a positive-length
+// Flate request does not apply the filter's full-decode limit.
+func decodeObjectStreamPrefix(osd *types.ObjectStreamDict, offset, lookahead int, budget int64) ([]byte, error) {
+	length, err := objectStreamOffset(lookahead, offset)
+	if err != nil {
+		return nil, err
+	}
+	if budget == 0 {
+		budget = filter.DefaultMaxDecodeBytes
+	}
+	if budget > 0 && int64(length) > budget {
+		return nil, fmt.Errorf("object stream prefix length %d exceeds limit %d: %w", length, budget, filter.ErrDecodeLimitExceeded)
+	}
+	return osd.DecodeLengthWithLimit(int64(length), budget)
+}
+
 func buildObjectArrayForObjectStream(
 	c context.Context,
 	osd *types.ObjectStreamDict,
 	objs []string,
 	fullContent bool,
-	decodedContent []byte) (types.Array, error) {
+	decodedContent []byte, maxDepth int) (types.Array, error) {
 	var objArray types.Array
 	var offsetOld int
+	provenance := contextutil.ParseProvenanceFromContext(c)
+	decode := func(c context.Context, s string) (types.Object, error) {
+		// Structural lookups can use a different Go context. Retain this
+		// compressed origin's read-local provenance without replacing it.
+		return compressedObject(contextutil.WithParseProvenance(c, provenance), s, maxDepth)
+	}
+
+	decodeAt := func(start, end int) types.DecodeLazyObjectStreamObjectFunc {
+		return func(c context.Context, s string) (types.Object, error) {
+			// Member-index EOF must not manufacture a lexical boundary.
+			// Lazy materialization has already decoded the actual container.
+			c = contextutil.WithParseProvenance(c, provenance)
+			if err := auditObjectStreamCut(c, osd.Content, start, end); err != nil {
+				return nil, err
+			}
+			return decode(c, s)
+		}
+	}
 
 	for i := 0; i < len(objs); i += 2 {
 
@@ -589,9 +836,9 @@ func buildObjectArrayForObjectStream(
 			return nil, fmt.Errorf("object stream dict offset %d: %w", i/2, err)
 		}
 
-		offset += osd.FirstObjOffset
-		if offset < osd.FirstObjOffset {
-			return nil, errCorruptObjectStreamDict
+		offset, err = objectStreamOffset(offset, osd.FirstObjOffset)
+		if err != nil {
+			return nil, err
 		}
 		if fullContent && offset > len(decodedContent) {
 			return nil, errCorruptObjectStreamDict
@@ -600,13 +847,37 @@ func buildObjectArrayForObjectStream(
 			return nil, errCorruptObjectStreamDict
 		}
 
+		if i == 0 && offset > osd.FirstObjOffset {
+			prefixContent := decodedContent
+			if !fullContent {
+				prefixContent, err = decodeObjectStreamPrefix(osd, offset, 1, osd.MaxDecodeBytes)
+				if err != nil {
+					if terminalHintError(err) || c.Err() != nil {
+						return nil, err
+					}
+					provenance.MarkRepair()
+				}
+			}
+			if len(prefixContent) >= offset {
+				if err := auditObjectStreamCut(c, prefixContent, osd.FirstObjOffset, offset); err != nil {
+					return nil, err
+				}
+				markObjectRemainder(c, string(prefixContent[osd.FirstObjOffset:offset]))
+			} else {
+				provenance.MarkRepair()
+			}
+		}
+		if i > 0 && offset == offsetOld {
+			provenance.MarkRepair()
+		}
+
 		if i > 0 {
-			o := types.NewLazyObjectStreamObject(osd, offsetOld, offset, compressedObject)
+			o := types.NewLazyObjectStreamObject(osd, offsetOld, offset, decodeAt(offsetOld, offset))
 			objArray = append(objArray, o)
 		}
 
 		if i == len(objs)-2 {
-			o := types.NewLazyObjectStreamObject(osd, offset, -1, compressedObject)
+			o := types.NewLazyObjectStreamObject(osd, offset, -1, decode)
 			objArray = append(objArray, o)
 		}
 
@@ -617,7 +888,7 @@ func buildObjectArrayForObjectStream(
 }
 
 // Parse all objects of an object stream and save them into objectStreamDict.ObjArray.
-func parseObjectStream(c context.Context, osd *types.ObjectStreamDict, limits model.ResourceLimits) error {
+func parseObjectStream(c context.Context, osd *types.ObjectStreamDict, limits model.ResourceLimits, auditIndex ...func([]string) error) error {
 	if log.ReadEnabled() {
 		log.Read.Printf("parseObjectStream begin: decoding %d objects.\n", osd.ObjCount)
 	}
@@ -627,7 +898,7 @@ func parseObjectStream(c context.Context, osd *types.ObjectStreamDict, limits mo
 	if decodedContent == nil {
 		// The actual content will be decoded lazily, only decode the prolog here.
 		var err error
-		decodedContent, err = osd.DecodeLengthWithLimit(int64(osd.FirstObjOffset), limits.MaxDecodeBytes)
+		decodedContent, err = decodeObjectStreamPrefix(osd, osd.FirstObjOffset, 0, limits.MaxDecodeBytes)
 		if err != nil {
 			return fmt.Errorf("decode object stream prolog: %w", err)
 		}
@@ -635,11 +906,34 @@ func parseObjectStream(c context.Context, osd *types.ObjectStreamDict, limits mo
 	if osd.FirstObjOffset > len(decodedContent) {
 		return errCorruptObjectStreamDict
 	}
+	cutContent := decodedContent
+	if !fullContent {
+		var err error
+		cutContent, err = decodeObjectStreamPrefix(osd, osd.FirstObjOffset, 1, limits.MaxDecodeBytes)
+		if err != nil {
+			if terminalHintError(err) || c.Err() != nil {
+				return err
+			}
+			contextutil.ParseProvenanceFromContext(c).MarkRepair()
+		}
+	}
+	if err := auditObjectStreamCut(c, cutContent, 0, osd.FirstObjOffset); err != nil {
+		return err
+	}
 	prolog := decodedContent[:osd.FirstObjOffset]
 
 	// Remove inline comment.
 	if i := bytes.Index(prolog, []byte("%")); i != -1 {
+		// Preserve the historical truncated index, but audit all discarded
+		// lines: a PDF comment ends at EOL, not at the end of the prolog.
+		markObjectRemainder(c, string(prolog[i:]))
 		prolog = prolog[:i]
+	}
+
+	for _, r := range string(prolog) {
+		if unicode.IsSpace(r) && !strings.ContainsRune("\x00\t\n\f\r ", r) {
+			contextutil.ParseProvenanceFromContext(c).MarkRepair()
+		}
 	}
 
 	// The separator used in the prolog shall be white space
@@ -668,9 +962,23 @@ func parseObjectStream(c context.Context, osd *types.ObjectStreamDict, limits mo
 		)
 	}
 
+	seen := types.IntSet{}
+	for i := 0; i < len(objs); i += 2 {
+		nr, err := strconv.Atoi(objs[i])
+		if err != nil || nr <= 0 || seen[nr] || strings.Trim(objs[i], "0123456789") != "" || strings.Trim(objs[i+1], "0123456789") != "" {
+			contextutil.ParseProvenanceFromContext(c).MarkRepair()
+		}
+		seen[nr] = true
+	}
+	for _, audit := range auditIndex {
+		if err := audit(objs); err != nil {
+			return err
+		}
+	}
+
 	// e.g., 10 0 11 25 = 2 Objects: #10 @ offset 0, #11 @ offset 25
 
-	objArray, err := buildObjectArrayForObjectStream(c, osd, objs, fullContent, decodedContent)
+	objArray, err := buildObjectArrayForObjectStream(c, osd, objs, fullContent, decodedContent, limits.MaxRecursionDepth)
 	if err != nil {
 		return fmt.Errorf("build object stream object array: %w", err)
 	}
@@ -793,15 +1101,25 @@ func extractXRefTableEntriesFromXRefStream(buf []byte, offExtra int64, xsd *type
 		)
 	}
 	if objCount > len(buf)/xrefEntryLen {
-		// Sometimes there is an additional xref entry not accounted for by "Index".
-		// We ignore such entries and do not treat this as an error.
 		return errCorruptXRefStream
+	}
+	if objCount < len(buf)/xrefEntryLen {
+		// Preserve normal acceptance, but omitted origins cannot authorize
+		// hint compatibility or deletion.
+		ctx.Read.RepairedXRef = true
 	}
 
 	j := 0
 
 	// bufToInt64 interprets the content of buf as an int64.
 	bufToInt64 := func(buf []byte) (i int64) {
+		// Preserve historical low-word conversion, but unsigned xref
+		// values outside int64 cannot supply trustworthy live identities.
+		for j, b := range buf {
+			if (j < len(buf)-8 && b != 0) || (j == len(buf)-8 && b&0x80 != 0) {
+				ctx.Read.RepairedXRef = true
+			}
+		}
 		for _, b := range buf {
 			i <<= 8
 			i |= int64(b)
@@ -809,17 +1127,14 @@ func extractXRefTableEntriesFromXRefStream(buf []byte, offExtra int64, xsd *type
 		return
 	}
 
+	seen := types.IntSet{}
 	for i := 0; i < len(buf) && j < len(xsd.Objects); i += xrefEntryLen {
 
 		objNr := xsd.Objects[j]
-
-		if ctx.XRefTable.Exists(objNr) {
-			if log.ReadEnabled() {
-				log.Read.Printf("Skip entry %d - already assigned\n", objNr)
-			}
-			j++
-			continue
+		if seen[objNr] {
+			ctx.Read.RepairedXRef = true
 		}
+		seen[objNr] = true
 
 		var c1 int64
 		if i1 == 0 {
@@ -831,6 +1146,22 @@ func extractXRefTableEntriesFromXRefStream(buf []byte, offExtra int64, xsd *type
 		}
 		c2 := bufToInt64(buf[i+i1 : i+i1+i2])
 		c3 := bufToInt64(buf[i+i1+i2 : i+i1+i2+i3])
+
+		// These unsigned fields are narrowed to native int by entry creation.
+		// Audit before revision precedence, including ignored older origins.
+		if ((c1 == 0 || c1 == 1 || c1 == 2) && int64(int(c3)) != c3) ||
+			(c1 == 2 && int64(int(c2)) != c2) {
+			ctx.Read.RepairedXRef = true
+		}
+
+		// Audit even older entries that revision precedence discards.
+		if ctx.XRefTable.Exists(objNr) {
+			if log.ReadEnabled() {
+				log.Read.Printf("Skip entry %d - already assigned\n", objNr)
+			}
+			j++
+			continue
+		}
 
 		entry := createXRefTableEntryFromXRefStream(c1, objNr, c2, c3, offExtra, ctx.Read.ObjectStreams, incr)
 		ctx.Table[objNr] = &entry
@@ -907,18 +1238,23 @@ func xRefStreamDict(c context.Context, ctx *model.Context, o types.Object, objNr
 		return nil, err
 	}
 	if declaredSize != nil && *declaredSize != xsd.Size {
+		ctx.Read.RepairedXRef = true
 		xsd.Dict.Update("Size", types.Integer(xsd.Size))
 		model.ShowRepaired(fmt.Sprintf("xref stream obj#%d Size from %d to %d", objNr, *declaredSize, xsd.Size))
 	}
 	return xsd, nil
 }
 
-func processXRefStream(ctx *model.Context, xsd *types.XRefStreamDict, objNr *int, offset *int64, offExtra int64, incr int) (prevOffset *int64, err error) {
+func processXRefStream(c context.Context, ctx *model.Context, xsd *types.XRefStreamDict, objNr *int, offset *int64, offExtra int64, incr int) (prevOffset *int64, err error) {
 	if log.ReadEnabled() {
 		log.Read.Println("processXRefStream: begin")
 	}
 
-	if err = parseTrailer(ctx.XRefTable, xsd.Dict); err != nil {
+	ctx.Read.TrailerDicts = append(ctx.Read.TrailerDicts, xsd.Dict)
+	if err = c.Err(); err != nil {
+		return nil, err
+	}
+	if err = parseTrailer(ctx.XRefTable, xsd.Dict, c); err != nil {
 		return nil, err
 	}
 
@@ -928,6 +1264,9 @@ func processXRefStream(ctx *model.Context, xsd *types.XRefStreamDict, objNr *int
 	}
 
 	*offset += offExtra
+	if offExtra == 0 {
+		contextutil.ParseProvenanceFromContext(c).RecordXRefOrigin(*offset)
+	}
 
 	if entry, ok := ctx.Table[*objNr]; ok && entry.Offset != nil && *entry.Offset == *offset {
 		entry.Object = *xsd
@@ -973,6 +1312,10 @@ func parseXRefStream(c context.Context, ctx *model.Context, rd io.Reader, offset
 		return nil, err
 	}
 
+	if !literalObjectHeader([]byte(line[:min(128, streamInd)]), *objNr, *genNr) {
+		ctx.Read.RepairedXRef = true
+	}
+
 	// parse this object
 	if log.ReadEnabled() {
 		log.Read.Printf("parseXRefStream: xrefstm obj#:%d gen:%d\n", *objNr, *genNr)
@@ -988,13 +1331,14 @@ func parseXRefStream(c context.Context, ctx *model.Context, rd io.Reader, offset
 		log.Read.Printf("parseXRefStream: we have an object: %s\n", o)
 	}
 
+	markObjectRemainder(c, l)
 	streamOffset += *offset
 	xsd, err := xRefStreamDict(c, ctx, o, *objNr, streamOffset)
 	if err != nil {
 		return nil, err
 	}
 
-	return processXRefStream(ctx, xsd, objNr, offset, offExtra, incr)
+	return processXRefStream(c, ctx, xsd, objNr, offset, offExtra, incr)
 }
 
 // Parse an xRefStream for a hybrid PDF file.
@@ -1126,7 +1470,7 @@ func materializeDirectInfoDict(xRefTable *model.XRefTable) error {
 	return nil
 }
 
-func parseTrailerID(xRefTable *model.XRefTable, d types.Dict) error {
+func parseTrailerID(xRefTable *model.XRefTable, d types.Dict, contexts ...context.Context) error {
 	arr := d.ArrayEntry("ID")
 	if arr != nil {
 		if len(arr) != 2 {
@@ -1135,6 +1479,9 @@ func parseTrailerID(xRefTable *model.XRefTable, d types.Dict) error {
 			}
 			if len(arr) != 1 {
 				return errInvalidTrailerID
+			}
+			if len(contexts) > 0 {
+				contextutil.ParseProvenanceFromContext(contexts[0]).MarkRepair()
 			}
 			arr = append(arr, arr[0])
 			model.ShowRepaired("trailer ID")
@@ -1158,7 +1505,7 @@ func parseTrailerID(xRefTable *model.XRefTable, d types.Dict) error {
 }
 
 // Parse trailer dict and return any offset of a previous xref section.
-func parseTrailer(xRefTable *model.XRefTable, d types.Dict) error {
+func parseTrailer(xRefTable *model.XRefTable, d types.Dict, contexts ...context.Context) error {
 	if log.ReadEnabled() {
 		log.Read.Println("parseTrailer begin")
 	}
@@ -1189,7 +1536,7 @@ func parseTrailer(xRefTable *model.XRefTable, d types.Dict) error {
 	}
 
 	if xRefTable.ID == nil {
-		if err := parseTrailerID(xRefTable, d); err != nil {
+		if err := parseTrailerID(xRefTable, d, contexts...); err != nil {
 			return err
 		}
 	}
@@ -1287,6 +1634,9 @@ func offsetPrev(ctx *model.Context, trailerDict types.Dict, offCurXRef *int64) (
 			log.Read.Printf("offsetPrev: previous xref table section offset:%d\n", *offset)
 		}
 		if *offset == 0 {
+			if ctx.Read != nil {
+				ctx.Read.RepairedXRef = true
+			}
 			offset = nil
 			if offCurXRef != nil {
 				if off := scanForPreviousXref(ctx, offCurXRef); off != nil {
@@ -1320,8 +1670,12 @@ func parseTrailerDict(c context.Context, ctx *model.Context, trailerDict types.D
 
 	xRefTable := ctx.XRefTable
 
-	if err := parseTrailer(xRefTable, trailerDict); err != nil {
+	ctx.Read.TrailerDicts = append(ctx.Read.TrailerDicts, trailerDict)
+	if err := parseTrailer(xRefTable, trailerDict, c); err != nil {
 		return nil, err
+	}
+	if !repairing && offExtra == 0 && offCurXRef != nil {
+		contextutil.ParseProvenanceFromContext(c).RecordXRefOrigin(*offCurXRef)
 	}
 
 	handleAdditionalStreams(trailerDict, xRefTable)
@@ -1397,11 +1751,21 @@ func scanLine(s *bufio.Scanner) (s1 string, err error) {
 	return s1, nil
 }
 
-func scanTrailerDictStart(s *bufio.Scanner, line *string) error {
+func scanTrailerDictStart(s *bufio.Scanner, line *string, contexts ...context.Context) error {
 	l := *line
 	var err error
 	for {
 		i := strings.Index(l, "<<")
+		if len(contexts) > 0 {
+			prefix := l
+			if i >= 0 {
+				prefix = l[:i]
+			}
+			markObjectRemainder(contexts[0], prefix)
+			if i >= 0 && strings.Contains(prefix, "%") {
+				contextutil.ParseProvenanceFromContext(contexts[0]).MarkRepair()
+			}
+		}
 		if i >= 0 {
 			*line = l[i:]
 			return nil
@@ -1416,7 +1780,80 @@ func scanTrailerDictStart(s *bufio.Scanner, line *string) error {
 	}
 }
 
-func scanTrailerDictRemainder(s *bufio.Scanner, line string, buf bytes.Buffer) (string, error) {
+// auditTrailerTerminator checks the selected cut and follows counterfeit/commented cuts.
+// Its bounded continuation is provenance-only; the historical returned trailer
+// bytes stay unchanged, and unreadable/overlong continuation denies authority.
+func auditTrailerTerminator(c context.Context, s *bufio.Scanner, line string, cut int, prefix string) error {
+	p := contextutil.ParseProvenanceFromContext(c)
+	if p == nil {
+		return nil
+	}
+	mode, err := lexicalCutState(c, []byte(prefix+line), 0, len(prefix)+cut)
+	if err != nil {
+		return err
+	}
+	end := cut + len("startxref")
+	canonical := mode == 0 && (end == len(line) || contextutil.PDFWhitespace(rune(line[end])))
+	if canonical {
+		markObjectRemainder(c, line[end:]+"\n")
+		// A syntactically terminated marker alone is not a complete epilogue.
+		// Audit the discarded offset/EOF lines without changing trailer values.
+		for _, offsetLine := range []bool{true, false} {
+			if err := c.Err(); err != nil {
+				return err
+			}
+			next, err := scanLine(s)
+			if err != nil {
+				p.MarkRepair()
+				return c.Err()
+			}
+			if len(next) > 1024 {
+				p.MarkRepair()
+				return nil
+			}
+			unreliable := false
+			auditXRefWhitespace(next, &unreliable)
+			trimmed := strings.TrimSpace(next)
+			if unreliable || (offsetLine && (trimmed == "" || strings.Trim(trimmed, "0123456789") != "")) ||
+				(!offsetLine && trimmed != "%%EOF") {
+				p.MarkRepair()
+			}
+		}
+		return nil
+	}
+	// A marker wholly inside a comment is harmless if all continuation up
+	// to the real marker is also whitespace/comments. Other fake markers
+	// discard syntax and must always invalidate provenance.
+	if mode != 'c' {
+		p.MarkRepair()
+	}
+	budget := 1024
+	for {
+		if err := c.Err(); err != nil {
+			return err
+		}
+		next, err := scanLine(s)
+		if err != nil {
+			p.MarkRepair()
+			return c.Err()
+		}
+		budget -= len(next) + 1
+		if budget < 0 {
+			p.MarkRepair()
+			return nil
+		}
+		trimmed := strings.TrimLeftFunc(next, contextutil.PDFWhitespace)
+		if strings.HasPrefix(trimmed, "startxref") {
+			end := len("startxref")
+			if end == len(trimmed) || contextutil.PDFWhitespace(rune(trimmed[end])) {
+				return auditTrailerTerminator(c, s, next, len(next)-len(trimmed), "")
+			}
+		}
+		markObjectRemainder(c, next+"\n")
+	}
+}
+
+func scanTrailerDictRemainder(s *bufio.Scanner, line string, buf bytes.Buffer, contexts ...context.Context) (string, error) {
 	var (
 		i   int
 		err error
@@ -1434,6 +1871,11 @@ func scanTrailerDictRemainder(s *bufio.Scanner, line string, buf bytes.Buffer) (
 		i = strings.Index(line, "startxref")
 	}
 
+	if len(contexts) > 0 {
+		if err := auditTrailerTerminator(contexts[0], s, line, i, buf.String()); err != nil {
+			return "", err
+		}
+	}
 	line = line[:i]
 	if log.ReadEnabled() {
 		log.Read.Printf("line: <%s>\n", line)
@@ -1444,17 +1886,17 @@ func scanTrailerDictRemainder(s *bufio.Scanner, line string, buf bytes.Buffer) (
 	return buf.String(), nil
 }
 
-func scanTrailer(s *bufio.Scanner, line string) (string, error) {
+func scanTrailer(s *bufio.Scanner, line string, contexts ...context.Context) (string, error) {
 	var buf bytes.Buffer
 	if log.ReadEnabled() {
 		log.Read.Printf("line: <%s>\n", line)
 	}
 
-	if err := scanTrailerDictStart(s, &line); err != nil {
+	if err := scanTrailerDictStart(s, &line, contexts...); err != nil {
 		return "", err
 	}
 
-	return scanTrailerDictRemainder(s, line, buf)
+	return scanTrailerDictRemainder(s, line, buf, contexts...)
 }
 
 func processTrailer(c context.Context, ctx *model.Context, s *bufio.Scanner, line string, offCurXRef *int64, offExtra int64, incr int, repairing bool) (*int64, error) {
@@ -1471,7 +1913,7 @@ func processTrailer(c context.Context, ctx *model.Context, s *bufio.Scanner, lin
 		}
 	}
 
-	trailerString, err := scanTrailer(s, trailerString)
+	trailerString, err := scanTrailer(s, trailerString, c)
 	if err != nil {
 		return nil, err
 	}
@@ -1485,6 +1927,7 @@ func processTrailer(c context.Context, ctx *model.Context, s *bufio.Scanner, lin
 		return nil, err
 	}
 
+	markObjectRemainder(c, trailerString)
 	trailerDict, ok := o.(types.Dict)
 	if !ok {
 		return nil, errCorruptTrailerDict
@@ -1519,13 +1962,20 @@ func parseXRefSection(c context.Context, ctx *model.Context, s *bufio.Scanner, f
 			log.Read.Printf("parseXRefSection: <%s>\n", line)
 		}
 
+		if !strings.HasPrefix(strings.TrimSpace(line), "trailer") {
+			auditXRefWhitespace(line, &ctx.Read.RepairedXRef)
+		}
 		fields = strings.Fields(line)
 	}
 
 	line = strings.TrimLeft(line, " ")
 	if !strings.HasPrefix(line, "trailer") {
 		// Process all sub sections of this xRef section.
-		if line, err = parseXRefTableSubSection(ctx.XRefTable, ctx.Configuration.Limits, s, fields, offExtra, incr); err != nil {
+		var unreliable []*bool
+		if ctx.Read != nil {
+			unreliable = []*bool{&ctx.Read.RepairedXRef}
+		}
+		if line, err = parseXRefTableSubSection(ctx.XRefTable, ctx.Configuration.Limits, s, fields, offExtra, incr, unreliable...); err != nil {
 			return nil, err
 		}
 		*ssCount++
@@ -1914,6 +2364,7 @@ func discardPreEncryptionObjects(ctx *model.Context) {
 // It populates the xRefTable by reading in all indirect objects line by line
 // and works on the assumption of a single xref section - meaning no incremental updates.
 func bypassXrefSection(c context.Context, ctx *model.Context, offExtra int64, wasErr error, incr int) error {
+	ctx.Read.RepairedXRef = true
 	ctx.Table = make(map[int]*model.XRefTableEntry)
 
 	var z int64
@@ -1994,6 +2445,9 @@ func postProcess(ctx *model.Context, xrefSectionCount int) {
 	// Ensure free object #0 if exactly one xref subsection
 	// and in one of the following weird situations:
 	if xrefSectionCount == 1 && !ctx.Exists(0) {
+		if ctx.Read != nil {
+			ctx.Read.RepairedXRef = true
+		}
 		// Fix for #250
 		e := ctx.Table[1]
 		if e != nil && e.Free {
@@ -2038,6 +2492,7 @@ func tryXRefSection(c context.Context, ctx *model.Context, rs io.ReadSeeker, off
 	repairOff := len(line)
 
 	if strings.TrimSpace(line) == "xref" {
+		auditXRefWhitespace(line, &ctx.Read.RepairedXRef)
 		if log.ReadEnabled() {
 			log.Read.Println("tryXRefSection: found xref section")
 		}
@@ -2048,6 +2503,7 @@ func tryXRefSection(c context.Context, ctx *model.Context, rs io.ReadSeeker, off
 	if strings.HasPrefix(line, "xref") {
 		fields := strings.Fields(line)
 		if len(fields) == 3 {
+			ctx.Read.RepairedXRef = true
 			return parseXRefSection(c, ctx, s, fields[1:], xrefSectionCount, offset, offExtra, incr)
 		}
 	}
@@ -2069,6 +2525,7 @@ func tryXRefSection(c context.Context, ctx *model.Context, rs io.ReadSeeker, off
 		if log.ReadEnabled() {
 			log.Read.Printf("Repair offset: %d\n", repairOff)
 		}
+		ctx.Read.RepairedXRef = true
 		ctx.Read.RepairOffset = int64(repairOff)
 		return parseXRefSection(c, ctx, s, nil, xrefSectionCount, offset, offExtra, incr)
 	}
@@ -2134,6 +2591,7 @@ func buildXRefTableStartingAt(c context.Context, ctx *model.Context, offset *int
 		}
 
 		if offs[*offset] {
+			ctx.Read.RepairedXRef = true
 			if offset, err = offsetLastXRefSection(ctx, ctx.Read.FileSize-*offset); err != nil {
 				return err
 			}
@@ -2206,7 +2664,28 @@ func readXRefTable(c context.Context, ctx *model.Context) (err error) {
 	//log.Read.Printf("freelist: %v\n", ctx.freeObjects())
 
 	// Note: Acrobat 6.0 and later do not use the free list to recycle object numbers - pdfcpu does.
+	// Track actual normalization, including head reconstruction/generation,
+	// dangling free entries and invalid links. Do not change ordinary repair
+	// acceptance or the model API used by writers.
+	type freeIdentity struct {
+		offset     int64
+		generation int
+	}
+	before := map[int]freeIdentity{}
+	for nr, e := range ctx.Table {
+		if e != nil && (e.Free || nr == 0) && e.Offset != nil && e.Generation != nil {
+			before[nr] = freeIdentity{*e.Offset, *e.Generation}
+		}
+	}
 	err = ctx.EnsureValidFreeList()
+	for nr, e := range ctx.Table {
+		if e != nil && (e.Free || nr == 0) && e.Offset != nil && e.Generation != nil {
+			old, found := before[nr]
+			if !found || old != (freeIdentity{*e.Offset, *e.Generation}) {
+				ctx.Read.RepairedXRef = true
+			}
+		}
+	}
 
 	if log.ReadEnabled() {
 		log.Read.Println("readXRefTable: end")
@@ -2377,12 +2856,31 @@ func buffer(c context.Context, rd io.Reader, maxObjectBytes int64) (buf []byte, 
 		}
 
 		if streamInd > 0 {
+			// Recovery searches substrings, not lexical origins. Audit the FINAL
+			// marker while its entire prefix is still available, for ordinary
+			// objects and xref streams alike. Retain historical parsing, but
+			// never let a comment/name/string/container confer hint authority.
+			if p := contextutil.ParseProvenanceFromContext(c); p != nil {
+				mode, auditErr := lexicalCutState(c, buf, 0, streamInd)
+				if auditErr != nil {
+					return nil, 0, 0, 0, auditErr
+				}
+				if mode != 0 {
+					p.MarkRepair()
+				}
+			}
 
 			// streamOffset ... the offset where the actual stream data begins.
 			//                  is right after the eol after "stream".
 			buf, streamOffset, err = streamOffsetForBuffer(buf, line, streamInd, rd, maxObjectBytes)
 			if err != nil {
 				return nil, 0, 0, 0, err
+			}
+			// Historical marker recovery is retained, but cannot establish
+			// an exact physical envelope for hint authorization.
+			markerEnd := streamInd + len("stream")
+			if markerEnd >= len(buf) || (buf[markerEnd] != '\n' && buf[markerEnd] != '\r') {
+				contextutil.ParseProvenanceFromContext(c).MarkRepair()
 			}
 		}
 	}
@@ -2702,7 +3200,7 @@ func parseObjectWithValidationPolicy(c context.Context, ctx *model.Context, line
 	return result.Object, nil
 }
 
-func object(c context.Context, ctx *model.Context, offset int64, objNr, genNr int) (o types.Object, endInd, streamInd int, streamOffset int64, err error) {
+func object(c context.Context, ctx *model.Context, offset int64, objNr, genNr int, validationMode ...int) (o types.Object, endInd, streamInd int, streamOffset int64, err error) {
 	var rd io.Reader
 
 	if rd, err = newPositionedReader(ctx.Read.RS, &offset); err != nil {
@@ -2722,6 +3220,27 @@ func object(c context.Context, ctx *model.Context, offset int64, objNr, genNr in
 	//log.Read.Printf("buflen=%d\n%s", len(buf), hex.Dump(buf))
 
 	line := string(buf)
+
+	if endInd >= 0 && (streamInd < 0 || endInd < streamInd) {
+		if p := contextutil.ParseProvenanceFromContext(c); p != nil {
+			mode, auditErr := lexicalCutState(c, buf, 0, endInd)
+			if auditErr != nil {
+				return nil, 0, 0, 0, auditErr
+			}
+			if mode != 0 {
+				p.MarkRepair()
+			}
+		}
+		// The permissive detector may recover junk/non-PDF terminators.
+		// Audit the actual bytes before slicing the marker away below.
+		end := endInd + len("endobj")
+		if end >= len(line) || !strings.HasPrefix(line[endInd:], "endobj") ||
+			!contextutil.PDFTokenBoundary(line, end) ||
+			(endInd > 0 && !contextutil.PDFWhitespace(rune(line[endInd-1])) &&
+				!strings.ContainsRune(")>]", rune(line[endInd-1]))) {
+			contextutil.ParseProvenanceFromContext(c).MarkRepair()
+		}
+	}
 
 	var l string
 
@@ -2765,6 +3284,9 @@ func object(c context.Context, ctx *model.Context, offset int64, objNr, genNr in
 		return nil, 0, 0, 0, err
 	}
 
+	if !literalObjectHeader([]byte(line[:min(128, len(line))]), *objectNr, *generationNr) || objNr != *objectNr || genNr != *generationNr {
+		contextutil.ParseProvenanceFromContext(c).MarkRepair()
+	}
 	if objNr != *objectNr || genNr != *generationNr {
 		// This is suspicious, but ok if two object numbers point to same offset and only one of them is used
 		// (compare entry.RefCount) like for cases where the PDF Writer is MS Word 2013.
@@ -2773,16 +3295,30 @@ func object(c context.Context, ctx *model.Context, offset int64, objNr, genNr in
 		}
 	}
 
-	l = strings.TrimSpace(l)
-	if len(l) == 0 {
+	// Audit leading separators before the historical TrimSpace removes
+	// them. Do not scan string or comment payload as structural whitespace.
+	leading := strings.TrimLeftFunc(l, unicode.IsSpace)
+	markObjectRemainder(c, l[:len(l)-len(leading)])
+	l = leading
+	if len(strings.TrimSpace(l)) == 0 {
 		// 7.3.9
 		// Specifying the null object as the value of a dictionary entry (7.3.7, "Dictionary Objects")
 		// shall be equivalent to omitting the entry entirely.
 		return nil, endInd, streamInd, streamOffset, err
 	}
 
-	o, err = parseObjectWithValidationPolicy(c, ctx, &l, objNr)
+	if len(validationMode) > 0 {
+		// Structural hint probes must not repair syntax or emit duplicate
+		// notices before the ordinary parser processes the same object.
+		result, parseErr := model.ParseObjectWithPolicy(c, &l, 0, validationMode[0], recursionLimit(ctx))
+		o, err = result.Object, parseErr
+	} else {
+		o, err = parseObjectWithValidationPolicy(c, ctx, &l, objNr)
+	}
 
+	if err == nil {
+		markObjectRemainder(c, l)
+	}
 	return o, endInd, streamInd, streamOffset, err
 }
 
@@ -3186,6 +3722,66 @@ func ensureIndirectStreamLength(c context.Context, ctx *model.Context, sd *types
 	return nil
 }
 
+// auditStreamPostlude inspects the actual encoded-input boundary, before
+// decryption or length normalization. It is provenance-only: an unreadable or
+// overlong envelope disqualifies hints without changing ordinary acceptance.
+func auditStreamPostlude(c context.Context, ctx *model.Context, sd *types.StreamDict) error {
+	p := contextutil.ParseProvenanceFromContext(c)
+	if p == nil {
+		return nil
+	}
+	if err := c.Err(); err != nil {
+		return err
+	}
+	start := sd.StreamOffset + int64(len(sd.Raw))
+	rd, err := newPositionedReader(ctx.Read.RS, &start)
+	if err != nil {
+		p.MarkRepair()
+		return nil
+	}
+	bb, err := io.ReadAll(io.LimitReader(rd, min(int64(1025), objectBufferLimit(ctx))))
+	if err != nil {
+		p.MarkRepair()
+		return c.Err()
+	}
+	if err := c.Err(); err != nil {
+		return err
+	}
+	pos := 0
+	skip := func() {
+		for pos < len(bb) {
+			if strings.ContainsRune("\x00\t\n\f\r ", rune(bb[pos])) {
+				pos++
+				continue
+			}
+			if bb[pos] != '%' {
+				return
+			}
+			for pos < len(bb) && bb[pos] != '\n' && bb[pos] != '\r' {
+				pos++
+			}
+		}
+	}
+	for _, marker := range []string{"endstream", "endobj"} {
+		skip()
+		if !bytes.HasPrefix(bb[pos:], []byte(marker)) {
+			p.MarkRepair()
+			return nil
+		}
+		pos += len(marker)
+		if pos == len(bb) {
+			// Only physical file EOF can terminate the marker at buffer EOF.
+			if start+int64(pos) != ctx.Read.FileSize {
+				p.MarkRepair()
+			}
+		} else if !strings.ContainsRune("\x00\t\n\f\r <>[]()/%", rune(bb[pos])) {
+			p.MarkRepair()
+			return nil
+		}
+	}
+	return nil
+}
+
 // loadEncodedStreamContent loads the encoded stream content into sd.
 func loadEncodedStreamContent(c context.Context, ctx *model.Context, sd *types.StreamDict, fixLength bool) error {
 	if sd.Raw != nil {
@@ -3217,6 +3813,15 @@ func loadEncodedStreamContent(c context.Context, ctx *model.Context, sd *types.S
 		return fmt.Errorf("read stream content: %w", err)
 	}
 
+	if err := auditStreamPostlude(c, ctx, sd); err != nil {
+		return fmt.Errorf("audit stream postlude: %w", err)
+	}
+
+	// This is encoded input, before decryption. Length reconstruction here
+	// is a reader repair; later plaintext-length adjustment is not.
+	if sd.StreamLength == nil || int64(len(sd.Raw)) != *sd.StreamLength {
+		contextutil.ParseProvenanceFromContext(c).MarkRepair()
+	}
 	if err := ensureStreamLength(sd, fixLength); err != nil {
 		return fmt.Errorf("stream length: %w", err)
 	}
@@ -3444,7 +4049,45 @@ func logStream(o types.Object) {
 
 }
 
-func decodeObjectStreamObjects(c context.Context, ctx *model.Context, sd *types.StreamDict, objNr int) (*types.ObjectStreamDict, error) {
+// compressedClaim retains the effective xref identity for one container member.
+// The index is private to a single read and never survives xref reconstruction.
+type compressedClaim struct {
+	nr    int
+	entry *model.XRefTableEntry
+}
+
+func indexCompressedClaims(c context.Context, table map[int]*model.XRefTableEntry) (map[int][]compressedClaim, error) {
+	claims := map[int][]compressedClaim{}
+	for nr, e := range table {
+		if err := c.Err(); err != nil {
+			return nil, err
+		}
+		if e != nil && e.Compressed && e.ObjectStream != nil {
+			claims[*e.ObjectStream] = append(claims[*e.ObjectStream], compressedClaim{nr, e})
+		}
+	}
+	return claims, nil
+}
+
+func auditCompressedClaims(c context.Context, claims []compressedClaim, objs []string) error {
+	for _, claim := range claims {
+		if err := c.Err(); err != nil {
+			return err
+		}
+		e := claim.entry
+		if e.ObjectStreamInd == nil || *e.ObjectStreamInd < 0 || *e.ObjectStreamInd >= len(objs)/2 {
+			contextutil.ParseProvenanceFromContext(c).MarkRepair()
+			continue
+		}
+		claimed, err := strconv.Atoi(objs[2*(*e.ObjectStreamInd)])
+		if err != nil || claimed != claim.nr {
+			contextutil.ParseProvenanceFromContext(c).MarkRepair()
+		}
+	}
+	return nil
+}
+
+func decodeObjectStreamObjects(c context.Context, ctx *model.Context, sd *types.StreamDict, objNr int, claims []compressedClaim) (*types.ObjectStreamDict, error) {
 	first, _, err := bootstrapIntegerEntry(c, ctx, sd.Dict, "First")
 	if err != nil {
 		return nil, fmt.Errorf("object stream obj#%d: parse dictionary: object stream entry First: %w", objNr, err)
@@ -3463,7 +4106,10 @@ func decodeObjectStreamObjects(c context.Context, ctx *model.Context, sd *types.
 	}
 
 	// Parse all objects of this object stream and save them to ObjectStreamDict.ObjArray.
-	if err = parseObjectStream(c, osd, ctx.Configuration.Limits); err != nil {
+	audit := func(objs []string) error {
+		return auditCompressedClaims(c, claims, objs)
+	}
+	if err = parseObjectStream(c, osd, ctx.Configuration.Limits, audit); err != nil {
 		return nil, fmt.Errorf("object stream obj#%d: parse objects: %w", objNr, err)
 	}
 
@@ -3478,7 +4124,17 @@ func decodeObjectStreamObjects(c context.Context, ctx *model.Context, sd *types.
 	return osd, nil
 }
 
-func decodeObjectStream(c context.Context, ctx *model.Context, objNr int) error {
+func decodeObjectStream(c context.Context, ctx *model.Context, objNr int, indexes ...map[int][]compressedClaim) error {
+	var claims map[int][]compressedClaim
+	if len(indexes) > 0 {
+		claims = indexes[0]
+	} else {
+		var err error
+		claims, err = indexCompressedClaims(c, ctx.Table)
+		if err != nil {
+			return err
+		}
+	}
 	entry := ctx.Table[objNr]
 	if entry == nil {
 		return fmt.Errorf("object stream obj#%d: %w", objNr, errMissingObjectStreamEntry)
@@ -3523,7 +4179,7 @@ func decodeObjectStream(c context.Context, ctx *model.Context, objNr int) error 
 
 	ctx.Read.UsingObjectStreams = true
 
-	osd, err := decodeObjectStreamObjects(c, ctx, &sd, objNr)
+	osd, err := decodeObjectStreamObjects(c, ctx, &sd, objNr, claims[objNr])
 	if err != nil {
 		return err
 	}
@@ -3592,6 +4248,10 @@ func decodeObjectStreams(c context.Context, ctx *model.Context) error {
 		log.Read.Println("decodeObjectStreams: begin")
 	}
 
+	claims, err := indexCompressedClaims(c, ctx.Table)
+	if err != nil {
+		return fmt.Errorf("index compressed claims: %w", err)
+	}
 	// Get sorted slice of object numbers.
 	var keys []int
 	for k := range ctx.Read.ObjectStreams {
@@ -3604,7 +4264,7 @@ func decodeObjectStreams(c context.Context, ctx *model.Context) error {
 		if err := c.Err(); err != nil {
 			return err
 		}
-		if err := decodeObjectStream(c, ctx, objNr); err != nil {
+		if err := decodeObjectStream(c, ctx, objNr, claims); err != nil {
 			return err
 		}
 	}
@@ -3656,7 +4316,6 @@ func handleLinearizationParmDict(ctx *model.Context, obj types.Object, objNr int
 	}
 
 	ctx.Read.Linearized = true
-	ctx.LinearizationObjs[objNr] = true
 	if log.ReadEnabled() {
 		log.Read.Printf("handleLinearizationParmDict: identified linearizationObj #%d\n", objNr)
 	}
@@ -3724,7 +4383,7 @@ func updateBinaryTotalSize(ctx *model.Context, o types.Object) {
 	}
 }
 
-func dereferenceAndLoad(c context.Context, ctx *model.Context, objNr int, entry *model.XRefTableEntry) error {
+func dereferenceAndLoad(c context.Context, ctx *model.Context, objNr int, entry *model.XRefTableEntry, hints ...*hintReadState) error {
 	if log.ReadEnabled() {
 		log.Read.Printf("dereferenceAndLoad: dereferencing object %d\n", objNr)
 	}
@@ -3767,6 +4426,13 @@ func dereferenceAndLoad(c context.Context, ctx *model.Context, objNr int, entry 
 	}
 
 	if sd, ok := o.(types.StreamDict); ok {
+		if hintCandidate(hints, objNr) {
+			if err := loadEncodedStreamContent(c, ctx, &sd, false); err != nil {
+				return fmt.Errorf("hint stream obj#%d: load encoded content: %w", objNr, err)
+			}
+			entry.Object = sd
+			return nil
+		}
 		if err = loadStreamDict(c, ctx, &sd, objNr, *entry.Generation, false); err != nil {
 			return err
 		}
@@ -3780,11 +4446,11 @@ func dereferenceAndLoad(c context.Context, ctx *model.Context, objNr int, entry 
 	return nil
 }
 
-func dereferenceObject(c context.Context, ctx *model.Context, objNr int) error {
-	return dereferenceObjectEntry(c, ctx, objNr, ctx.Table[objNr])
+func dereferenceObject(c context.Context, ctx *model.Context, objNr int, hints ...*hintReadState) error {
+	return dereferenceObjectEntry(c, ctx, objNr, ctx.Table[objNr], hints...)
 }
 
-func dereferenceObjectEntry(c context.Context, ctx *model.Context, objNr int, entry *model.XRefTableEntry) error {
+func dereferenceObjectEntry(c context.Context, ctx *model.Context, objNr int, entry *model.XRefTableEntry, hints ...*hintReadState) error {
 	if entry == nil {
 		return fmt.Errorf("xref entry for object %d is nil: %w", objNr, errCorruptXRefSubsection)
 	}
@@ -3826,6 +4492,17 @@ func dereferenceObjectEntry(c context.Context, ctx *model.Context, objNr int, en
 	o := entry.Object
 
 	if o != nil {
+		// Candidate dictionaries may have been cached by structural lookups;
+		// cached does not mean their encoded stream has been loaded/finalized.
+		if hintCandidate(hints, objNr) {
+			if sd, ok := o.(types.StreamDict); ok {
+				if err := loadEncodedStreamContent(c, ctx, &sd, false); err != nil {
+					return fmt.Errorf("hint stream obj#%d: load cached content: %w", objNr, err)
+				}
+				entry.Object = sd
+				return nil
+			}
+		}
 		// Already dereferenced.
 		logStream(entry.Object)
 		updateBinaryTotalSize(ctx, o)
@@ -3835,7 +4512,7 @@ func dereferenceObjectEntry(c context.Context, ctx *model.Context, objNr int, en
 		return nil
 	}
 
-	if err := dereferenceAndLoad(c, ctx, objNr, entry); err != nil {
+	if err := dereferenceAndLoad(c, ctx, objNr, entry, hints...); err != nil {
 		return err
 	}
 
@@ -3844,7 +4521,7 @@ func dereferenceObjectEntry(c context.Context, ctx *model.Context, objNr int, en
 	return nil
 }
 
-func dereferenceObjectsSorted(c context.Context, ctx *model.Context) error {
+func dereferenceObjectsSorted(c context.Context, ctx *model.Context, hints ...*hintReadState) error {
 	xRefTable := ctx.XRefTable
 	var keys []int
 	for k := range xRefTable.Table {
@@ -3856,7 +4533,7 @@ func dereferenceObjectsSorted(c context.Context, ctx *model.Context) error {
 		if err := c.Err(); err != nil {
 			return err
 		}
-		if err := dereferenceObject(c, ctx, objNr); err != nil {
+		if err := dereferenceObject(c, ctx, objNr, hints...); err != nil {
 			return err
 		}
 	}
@@ -3892,11 +4569,11 @@ func denseXRefTable(table map[int]*model.XRefTableEntry, maxObjNr int) bool {
 	return len(table) > 0 && maxObjNr >= 0 && maxObjNr/2 < len(table)
 }
 
-func dereferenceObjectsAscending(c context.Context, ctx *model.Context) error {
+func dereferenceObjectsAscending(c context.Context, ctx *model.Context, hints ...*hintReadState) error {
 	xRefTable := ctx.XRefTable
 	maxObjNr := maxObjectNumber(xRefTable.Table)
 	if !denseXRefTable(xRefTable.Table, maxObjNr) {
-		return dereferenceObjectsSorted(c, ctx)
+		return dereferenceObjectsSorted(c, ctx, hints...)
 	}
 
 	for objNr := 0; objNr <= maxObjNr; objNr++ {
@@ -3907,7 +4584,7 @@ func dereferenceObjectsAscending(c context.Context, ctx *model.Context) error {
 		if err := c.Err(); err != nil {
 			return err
 		}
-		if err := dereferenceObjectEntry(c, ctx, objNr, entry); err != nil {
+		if err := dereferenceObjectEntry(c, ctx, objNr, entry, hints...); err != nil {
 			return err
 		}
 	}
@@ -4004,7 +4681,7 @@ func validateHintStreamDictionaries(ctx *model.Context) error {
 }
 
 // Dereferences all objects including compressed objects from object streams.
-func dereferenceObjects(c context.Context, ctx *model.Context) error {
+func dereferenceObjects(c context.Context, ctx *model.Context, hints ...*hintReadState) error {
 	if log.ReadEnabled() {
 		log.Read.Println("dereferenceObjects: begin")
 	}
@@ -4014,16 +4691,24 @@ func dereferenceObjects(c context.Context, ctx *model.Context) error {
 		f = dereferenceObjectsSorted
 	}
 
-	if err := f(c, ctx); err != nil {
+	if err := f(c, ctx, hints...); err != nil {
 		repairOffset := errors.Is(err, model.ErrCorruptObjectOffset)
 		repairMissing := ctx.XRefTable.ValidationMode == model.ValidationRelaxed && errors.Is(err, errUnregisteredObject)
 		if !repairOffset && !repairMissing {
 			return err
 		}
+		// Rebuilding replaces candidates with normally loaded/decrypted
+		// entries. The old deferred ciphertext inventory no longer applies.
+		hints = nil
 		if err := bypassXrefSection(c, ctx, 0, err, 1); err != nil {
 			return err
 		}
-		if err = f(c, ctx); err != nil {
+		if err = f(c, ctx, hints...); err != nil {
+			return err
+		}
+	}
+	if len(hints) > 0 && hints[0] != nil {
+		if err := finalizeHintStreams(c, ctx, hints[0]); err != nil {
 			return err
 		}
 	}
@@ -4099,13 +4784,18 @@ func dereferenceXRefTable(c context.Context, ctx *model.Context) error {
 	}
 	//fmt.Println("pw authenticated")
 
+	hints, err := discoverHintStreams(c, ctx)
+	if err != nil {
+		return fmt.Errorf("identify linearization hints: %w", err)
+	}
+
 	// Prepare decompressed objects.
 	if err := decodeObjectStreams(c, ctx); err != nil {
 		return err
 	}
 
 	// For each xRefTableEntry assign a Object either by parsing from file or pointing to a decompressed object.
-	if err := dereferenceObjects(c, ctx); err != nil {
+	if err := dereferenceObjects(c, ctx, hints); err != nil {
 		return err
 	}
 

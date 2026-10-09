@@ -198,6 +198,19 @@ func WriteIncrement(c context.Context, ctx *model.Context) error {
 		return err
 	}
 
+	// Appending invalidates /L, so later reads cannot repair old plaintext
+	// hints. Supersede only actually repaired hints using normal encryption.
+	if ctx.Read != nil {
+		var repaired []int
+		for nr := range ctx.Read.RepairedHints {
+			repaired = append(repaired, nr)
+		}
+		sort.Ints(repaired)
+		for _, nr := range repaired {
+			ctx.Write.IncrementWithObjNr(nr)
+		}
+	}
+
 	// Write all modified objects that are part of this increment.
 	for _, i := range ctx.Write.ObjNrs {
 		if err := writeFlatObject(c, ctx, i); err != nil {
@@ -577,27 +590,6 @@ func deleteRedundantObject(ctx *model.Context, objNr int) {
 
 }
 
-func detectLinearizationObjs(xRefTable *model.XRefTable, entry *model.XRefTableEntry, i int) {
-	if _, ok := entry.Object.(types.StreamDict); ok {
-
-		if *entry.Offset == *xRefTable.OffsetPrimaryHintTable {
-			xRefTable.LinearizationObjs[i] = true
-			if log.WriteEnabled() {
-				log.Write.Printf("detectLinearizationObjs: primaryHintTable at obj #%d\n", i)
-			}
-		}
-
-		if xRefTable.OffsetOverflowHintTable != nil &&
-			*entry.Offset == *xRefTable.OffsetOverflowHintTable {
-			xRefTable.LinearizationObjs[i] = true
-			if log.WriteEnabled() {
-				log.Write.Printf("detectLinearizationObjs: overflowHintTable at obj #%d\n", i)
-			}
-		}
-
-	}
-}
-
 func deleteRedundantObjects(c context.Context, ctx *model.Context) error {
 	if err := contextutil.Check(c); err != nil {
 		return err
@@ -644,13 +636,8 @@ func deleteRedundantObjects(c context.Context, ctx *model.Context) error {
 
 		// Object not written
 
-		if ctx.Read.Linearized && entry.Offset != nil {
-			// This block applies to pre existing objects only.
-			// Since there is no type entry for stream dicts associated with linearization dicts
-			// we have to check every StreamDict that has not been written.
-			detectLinearizationObjs(xRefTable, entry, i)
-		}
-
+		// Only reader-verified, unreferenced linearization identities may be
+		// discarded. An unchecked /H offset must never mark ordinary content.
 		deleteRedundantObject(ctx, i)
 	}
 

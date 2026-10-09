@@ -1,4 +1,35 @@
 bugs:
+  - bug_id: BUG-release-coverage-gate
+    status: owner_waived
+    severity: HIGH
+    priority: HIGH
+    scope: release-verification
+    summary: Aggregate percentage release thresholds explicitly owner-waived
+    file: specs/bugs/BUG-release-coverage-gate.md
+    evidence: specs/verifications/plaintext-hint-release-gates.md
+  - bug_id: BUG-native32-crypto-test-constants
+    status: verified_unreleased
+    approach: Runtime int64 variables preserve native32 skip and native64 checks
+    files_changed:
+      - pkg/pdfcpu/crypto_test.go
+    risk_level: low
+    evidence: specs/verifications/plaintext-hint-round13-verification.md
+    severity: LOW
+    priority: HIGH
+    scope: tests-only
+    summary: Make skipped unsigned permission test compile on native32
+    file: specs/bugs/BUG-native32-crypto-test-constants.md
+  - bug_id: BUG-2026-10-08-plaintext-linearization-hints
+    status: verified_unreleased
+    approach: Bounded relaxed compatibility for verified unreferenced hints
+    risk_level: high
+    evidence: specs/verifications/plaintext-hint-round13-acceptance.md
+    date: 2026-10-08
+    severity: HIGH
+    priority: HIGH
+    scope: reader-encryption
+    summary: Investigate plaintext linearization hint streams before exemption
+    file: specs/bugs/BUG-2026-10-08-plaintext-linearization-hints.md
   - bug_id: BUG-2026-09-24T143457
     date: 2026-09-24
     severity: HIGH

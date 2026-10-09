@@ -573,12 +573,14 @@ func TestNormalizeUnsignedPermission(t *testing.T) {
 		t.Skip("unsigned 32-bit permission values require a 64-bit int")
 	}
 
+	minUnsignedPermission := int64(1 << 31)
+	maxUnsignedPermission := int64(1<<32 - 1)
 	tests := []struct {
 		permission int
 		want       int
 	}{
-		{permission: 1 << 31, want: -1 << 31},
-		{permission: 1<<32 - 1, want: -1},
+		{permission: int(minUnsignedPermission), want: -1 << 31},
+		{permission: int(maxUnsignedPermission), want: -1},
 	}
 
 	for _, tt := range tests {

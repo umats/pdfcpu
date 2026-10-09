@@ -1,0 +1,86 @@
+type: verification-evidence
+context: BUG-2026-10-08-plaintext-linearization-hints
+phase: 5
+candidate:
+  branch: fix/plaintext-linearization-hints
+  source_manifest: .pi-herdsman/hint-verify-resume/source-before.sha256
+  manifest_sha256: >-
+    5112a1d691b538b8101be2c6cbc81697e48692bd8a9636f2e829b6fa37005eb5
+  note: >-
+    Includes untracked Go sources and PDF fixtures;
+    non-output entries unchanged across Preflight.
+terminal_verdict:
+  command: go test -count=1 ./... && go vet ./... && go build ./...
+  exit_code: 0
+  stdout_stderr: .pi-herdsman/hint-verify-resume/preflight.log
+  log_sha256: 131d231191c39fe3fb9a8f51cb1bc3feb153d23424ed49d1e3d964354bd96c33
+  note: One contiguous fresh run; not combined with previous baseline evidence.
+focused:
+  command: "go test -count=1 ./pkg/pdfcpu ./pkg/api \
+    ./internal/contextutil -run 'Test(HintPhysicalOrigins|\
+    HintProbePreservesOriginalAndEncryptedBytes|PrimaryHintVariants|\
+    HintCompressedIndirectLength|HintDiscoveryIdentityGuards|\
+    UnencryptedPrimaryHint)' -v"
+  exit_code: 0
+  stdout_stderr: .pi-herdsman/hint-verify-resume/focused.log
+race:
+  command: >-
+    go test -race -count=1 ./pkg/api ./pkg/pdfcpu ./pkg/pdfcpu/model
+    ./internal/contextutil -run 'Test.*(Hint|Linearization|Context)'
+  exit_code: 0
+  stdout_stderr: .pi-herdsman/hint-verify-resume/race.log
+  supplement:
+    command: go test -race -count=1 ./internal/contextutil
+    exit_code: 0
+    stdout_stderr: .pi-herdsman/hint-verify-resume/context-race.log
+behavior:
+  command: "go test -count=1 ./pkg/api -run 'Test(\
+    PlaintextPrimaryHintRelaxed|PlaintextPrimaryHintControls|\
+    PrimaryHintRejectsReferencedAndStrict|\
+    PrimaryHintForgedContentPreservedByWriter|PrimaryHintLimits|\
+    HintPhysicalOriginDenial)' -v"
+  exit_code: 0
+  stdout_stderr: .pi-herdsman/hint-verify-resume/behavior.log
+  note: >-
+    Synthetic public API read/info/decrypt, writer preservation,
+    denial, authentication and limit assertions pass;
+    not manual production UAT.
+housekeeping:
+  restored: >-
+    440 tracked PDF outputs and 6 JSON outputs
+    from initially clean samples subtree
+  retained_new_outputs:
+    - pkg/samples/basic/FormDemo.pdf
+    - pkg/samples/bookmarks/bookmarkTree2Levels.pdf
+    - pkg/samples/bookmarks/bookmarkTreeImported.pdf
+  whitespace_check: passed
+owner_uat:
+  accepted: true
+  scope: Synthetic public behavioral evidence only; no production claim.
+completeness_gate:
+  passed: false
+  note: >-
+    Owner selected bug-scoped completeness checks, not story artifacts.
+    Map each approved bug criterion to tests and current evidence before
+    declaring PASS. Installed wrappers target their own package root.
+    Story-only scripts are inapplicable; substantive gates remain.
+acceptance:
+  passed: false
+  reviewer_a: 'result:hint-accept10a#1'
+  reviewer_b: 'result:hint-accept10b#1'
+  scores: [81.25, 81.25]
+  response: specs/verifications/plaintext-hint-round10-acceptance-response.md
+remaining_gates:
+  - Correct acceptance findings and refresh current-source validation
+  - Current-source security audit and independent acceptance
+  - Bug-scoped verification completeness checks
+  - Explicit Phase 5 transition confirmation
+  - Separate release authorization
+phase_passed: false
+limitations:
+  - >-
+    Original production input unavailable;
+    synthetic compatibility evidence only.
+  - Two historical consumer failures remain unexplained.
+  - Performance and optional early-xref-stream scenario remain deferred.
+  - No commit, publication, merge, tag or consumer rollout performed.
